@@ -1,5 +1,5 @@
 {
-  "template_id": "resolved_follow_up_de",
-  "language": "de",
-  "text": "Guten Tag [CUSTOMER_NAME], wir bestätigen, dass Ihr technisches Problem vom [DATE] behoben wurde. Sollten Sie weitere Fragen haben, antworten Sie auf diese SMS oder rufen Sie uns an. Ihr Team von [COMPANY_NAME]."
+  "template_id": "resolved_follow_up_en",
+  "language": "en",
+  "text": "Hi [CUSTOMER_NAME], this is a confirmation that your technical issue from [DATE] has been resolved. If you have any other questions, just reply to this text or give us a call. Thanks for being a [COMPANY_NAME] customer."
 }
