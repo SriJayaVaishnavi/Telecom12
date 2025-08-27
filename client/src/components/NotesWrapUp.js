@@ -4,7 +4,11 @@ const NotesWrapUp = ({ wrapUp, sms, smsSent, onGenerateSummary, onSendSms }) => 
   return (
     <div className="card">
       <h4>AI-Generated Wrap-Up</h4>
-      <button onClick={onGenerateSummary} disabled={wrapUp.summary}>
+      <button
+        className="btn btn-primary"
+        onClick={onGenerateSummary}
+        disabled={wrapUp.summary}
+      >
         Generate AI Summary
       </button>
 
@@ -20,11 +24,15 @@ const NotesWrapUp = ({ wrapUp, sms, smsSent, onGenerateSummary, onSendSms }) => 
       )}
 
       <div className="sms-section">
-        <button onClick={onSendSms} disabled={smsSent}>
+        <button
+          className="btn btn-secondary"
+          onClick={onSendSms}
+          disabled={smsSent}
+        >
           {smsSent ? 'SMS Sent!' : 'Send SMS Follow-up'}
         </button>
         {smsSent && <p className="sms-confirmation">Confirmation sent to customer.</p>}
-        <p><small>Template: {sms.text.replace('[CUSTOMER_NAME]', 'Anna Müller').replace('[DATE]', new Date().toLocaleDateString())}</small></p>
+        <p><small>Template: {sms.text}</small></p>
       </div>
     </div>
   );
