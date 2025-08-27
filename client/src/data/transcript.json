@@ -1,37 +1,37 @@
 [
   {
     "speaker": "system",
-    "text": "Incoming call from +49 176 12345678"
+    "text": "Incoming call from (917) 555-0123"
   },
   {
     "speaker": "agent",
-    "text": "Guten Tag, Lukas Schmidt am Apparat. Mit wem spreche ich?",
-    "pii_redacted": "Guten Tag, Lukas Schmidt am Apparat. Mit wem spreche ich?"
+    "text": "Thanks for calling, you've reached technical support. My name is John, who am I speaking with today?",
+    "pii_redacted": "Thanks for calling, you've reached technical support. My name is John, who am I speaking with today?"
   },
   {
     "speaker": "caller",
-    "text": "Hallo, hier ist Anna Müller.",
-    "pii_redacted": "Hallo, hier ist [PERSON_NAME]."
+    "text": "Hi, this is Jennifer Miller.",
+    "pii_redacted": "Hi, this is [PERSON_NAME]."
   },
   {
     "speaker": "agent",
-    "text": "Guten Tag, Frau Müller. Aus Datenschutzgründen, können Sie mir bitte Ihr Geburtsdatum und Ihre Adresse zur Verifizierung nennen?",
-    "pii_redacted": "Guten Tag, Frau Müller. Aus Datenschutzgründen, können Sie mir bitte Ihr [DOB] und Ihre [ADDRESS] zur Verifizierung nennen?"
+    "text": "Hey Ms. Miller. I can help you with that. To pull up your account, can I get your date of birth and billing zip code?",
+    "pii_redacted": "Hey Ms. Miller. I can help you with that. To pull up your account, can I get your [DOB] and your [ZIP_CODE]?"
   },
   {
     "speaker": "caller",
-    "text": "Ja, klar. 15. Mai 1985, und die Adresse ist Hauptstraße 123 in Berlin.",
-    "pii_redacted": "Ja, klar. [DOB], und die Adresse ist [ADDRESS] in Berlin."
+    "text": "Sure, it's May 15th, 1985, and the zip is 10001.",
+    "pii_redacted": "Sure, it's [DOB], and the zip is [ZIP_CODE]."
   },
   {
     "speaker": "agent",
-    "text": "Vielen Dank für die Verifizierung. Wie kann ich Ihnen heute helfen?",
-    "pii_redacted": "Vielen Dank für die Verifizierung. Wie kann ich Ihnen heute helfen?"
+    "text": "Great, thanks for verifying. So what seems to be the problem?",
+    "pii_redacted": "Great, thanks for verifying. So what seems to be the problem?"
   },
   {
     "speaker": "caller",
-    "text": "Mein Internet fällt ständig aus. Das hat angefangen, seit mein Router dieses neue Update bekommen hat, Version 3.14.2.",
-    "pii_redacted": "Mein Internet fällt ständig aus. Das hat angefangen, seit mein Router dieses neue Update bekommen hat, Version 3.14.2.",
+    "text": "My internet keeps dropping out. It only started after my router got that new 3.14.2 firmware update.",
+    "pii_redacted": "My internet keeps dropping out. It only started after my router got that new 3.14.2 firmware update.",
     "intent": "connection_issue",
     "entities": {
       "product": "internet",

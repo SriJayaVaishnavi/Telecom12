@@ -14,7 +14,7 @@
       "id": 2,
       "title": "Inform Customer of Rollback",
       "action": "script",
-      "script_text": "Frau Müller, es scheint ein bekanntes Problem mit der neuen Firmware zu geben. Ich muss ein Downgrade auf die vorherige Version durchführen, um das Problem zu beheben. Das dauert etwa 5-10 Minuten und Ihr Internet wird kurz unterbrochen. Ist das in Ordnung für Sie?",
+      "script_text": "Ms. Miller, it looks like there's a known issue with the new firmware. To fix this, I need to roll it back to the previous version. This will take about 5-10 minutes and your internet will be briefly disconnected. Is that okay with you?",
       "status": "pending",
       "evidence": null
     },
@@ -38,7 +38,7 @@
       "id": 5,
       "title": "Confirm Resolution with Customer",
       "action": "script",
-      "script_text": "Die alte Firmware ist wieder aktiv und die Leitung ist jetzt stabil. Sollte alles wieder wie gewohnt funktionieren. Gibt es sonst noch etwas, bei dem ich Ihnen helfen kann?",
+      "script_text": "Okay, the old firmware is active again and the line is stable now. Everything should be back to normal. Is there anything else I can help you with today?",
       "status": "pending",
       "evidence": null
     }
