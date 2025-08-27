@@ -1,0 +1,9 @@
+{
+  "id": "EUC-23417",
+  "title": "Frequent disconnects after ONT firmware update to 3.14.2",
+  "status": "Resolved",
+  "created_at": "2024-08-26T10:15:00Z",
+  "resolution": "Rolled back ONT firmware from 3.14.2 to 3.12.9. Confirmed stability with customer.",
+  "customer_impact": "Multiple customers on Fiber 200 plan with ZX-900 ONT reported link flaps after the automatic firmware push of v3.14.2.",
+  "notes": "Root cause identified as a regression in the new firmware's handling of specific line conditions. Engineering team is aware and working on a hotfix (JIRA: FIB-9821). Interim solution is to roll back affected customers to v3.12.9."
+}
