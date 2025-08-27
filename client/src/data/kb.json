@@ -1,0 +1,8 @@
+{
+  "id": "KB-ONT-014",
+  "title": "How to roll back ONT firmware for ZX-900 series",
+  "category": "Fiber Optics",
+  "last_updated": "2024-08-26T11:00:00Z",
+  "author": "L2 Support Team",
+  "content": "<h3>Issue</h3><p>Customers with ZX-900 ONTs on firmware v3.14.2 may experience intermittent connection drops (link flaps).</p><h3>Cause</h3><p>A regression in the firmware v3.14.2 is the root cause. A hotfix is pending.</p><h3>Resolution</h3><p>The approved interim solution is to roll back the firmware to the last stable version (v3.12.9).</p><ol><li>Verify the issue by running a line test. Look for an excessive number of link flaps in the diagnostic output.</li><li>Inform the customer about the necessary rollback and the brief service interruption.</li><li>Use the 'Execute Firmware Rollback' quick action in the agent desktop. This triggers an API call to the provisioning system.</li><li>After the action completes (approx. 5-10 minutes), run the line test again to confirm the link is stable.</li><li>Confirm with the customer that the service is restored.</li></ol>"
+}

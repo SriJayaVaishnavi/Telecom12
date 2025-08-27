@@ -1,0 +1,46 @@
+{
+  "playbook_id": "KB-ONT-014",
+  "title": "Rollback ONT Firmware (ZX-900)",
+  "steps": [
+    {
+      "id": 1,
+      "title": "Verify Line Stability",
+      "action": "quick_action",
+      "action_id": "line_test",
+      "status": "pending",
+      "evidence": null
+    },
+    {
+      "id": 2,
+      "title": "Inform Customer of Rollback",
+      "action": "script",
+      "script_text": "Frau Müller, es scheint ein bekanntes Problem mit der neuen Firmware zu geben. Ich muss ein Downgrade auf die vorherige Version durchführen, um das Problem zu beheben. Das dauert etwa 5-10 Minuten und Ihr Internet wird kurz unterbrochen. Ist das in Ordnung für Sie?",
+      "status": "pending",
+      "evidence": null
+    },
+    {
+      "id": 3,
+      "title": "Execute Firmware Rollback",
+      "action": "api_call",
+      "api_endpoint": "/api/ont/rollback",
+      "status": "pending",
+      "evidence": null
+    },
+    {
+      "id": 4,
+      "title": "Confirm Stability Post-Rollback",
+      "action": "quick_action",
+      "action_id": "line_test",
+      "status": "pending",
+      "evidence": null
+    },
+    {
+      "id": 5,
+      "title": "Confirm Resolution with Customer",
+      "action": "script",
+      "script_text": "Die alte Firmware ist wieder aktiv und die Leitung ist jetzt stabil. Sollte alles wieder wie gewohnt funktionieren. Gibt es sonst noch etwas, bei dem ich Ihnen helfen kann?",
+      "status": "pending",
+      "evidence": null
+    }
+  ]
+}

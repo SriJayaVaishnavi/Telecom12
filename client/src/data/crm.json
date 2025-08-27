@@ -1,0 +1,16 @@
+{
+  "customer": {
+    "name": "Anna Müller",
+    "plan": "Fiber 200",
+    "ont_model": "ZX-900",
+    "ont_firmware": "3.14.2",
+    "tenure_years": 2.7,
+    "risk_score": "medium",
+    "open_cases": 2,
+    "area_outage": false
+  },
+  "agent": {
+    "name": "Lukas Schmidt",
+    "tier": 1
+  }
+}

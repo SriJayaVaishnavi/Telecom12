@@ -1,0 +1,43 @@
+[
+  {
+    "speaker": "system",
+    "text": "Incoming call from +49 176 12345678"
+  },
+  {
+    "speaker": "agent",
+    "text": "Guten Tag, Lukas Schmidt am Apparat. Mit wem spreche ich?",
+    "pii_redacted": "Guten Tag, Lukas Schmidt am Apparat. Mit wem spreche ich?"
+  },
+  {
+    "speaker": "caller",
+    "text": "Hallo, hier ist Anna Müller.",
+    "pii_redacted": "Hallo, hier ist [PERSON_NAME]."
+  },
+  {
+    "speaker": "agent",
+    "text": "Guten Tag, Frau Müller. Aus Datenschutzgründen, können Sie mir bitte Ihr Geburtsdatum und Ihre Adresse zur Verifizierung nennen?",
+    "pii_redacted": "Guten Tag, Frau Müller. Aus Datenschutzgründen, können Sie mir bitte Ihr [DOB] und Ihre [ADDRESS] zur Verifizierung nennen?"
+  },
+  {
+    "speaker": "caller",
+    "text": "Ja, klar. 15. Mai 1985, und die Adresse ist Hauptstraße 123 in Berlin.",
+    "pii_redacted": "Ja, klar. [DOB], und die Adresse ist [ADDRESS] in Berlin."
+  },
+  {
+    "speaker": "agent",
+    "text": "Vielen Dank für die Verifizierung. Wie kann ich Ihnen heute helfen?",
+    "pii_redacted": "Vielen Dank für die Verifizierung. Wie kann ich Ihnen heute helfen?"
+  },
+  {
+    "speaker": "caller",
+    "text": "Mein Internet fällt ständig aus. Das hat angefangen, seit mein Router dieses neue Update bekommen hat, Version 3.14.2.",
+    "pii_redacted": "Mein Internet fällt ständig aus. Das hat angefangen, seit mein Router dieses neue Update bekommen hat, Version 3.14.2.",
+    "intent": "connection_issue",
+    "entities": {
+      "product": "internet",
+      "problem": "disconnects",
+      "cause": "firmware_update",
+      "version": "3.14.2"
+    }
+  }
+]
