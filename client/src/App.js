@@ -1,13 +1,20 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import AgentDesktop from './components/AgentDesktop';
+import CallAudioPlayer from './components/CallAudioPlayer';
 import './App.css';
 
 function App() {
   const [callActive, setCallActive] = useState(false);
+  const audioPlayerRef = useRef(null);
 
   const handleStartCall = () => {
     // This simulates the screen-pop
     setCallActive(true);
+    setTimeout(() => {
+      if (audioPlayerRef.current) {
+        audioPlayerRef.current.playAudio();
+      }
+    }, 100); // Add a small delay
   };
 
   return (
@@ -20,6 +27,7 @@ function App() {
           <button onClick={handleStartCall}>Simulate Incoming Call (Anna Müller)</button>
         </div>
       )}
+      <CallAudioPlayer ref={audioPlayerRef} />
     </div>
   );
 }

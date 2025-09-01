@@ -5,8 +5,8 @@
   },
   {
     "speaker": "agent",
-    "text": "Thanks for calling, you've reached technical support. My name is John, who am I speaking with today?",
-    "pii_redacted": "Thanks for calling, you've reached technical support. My name is John, who am I speaking with today?"
+    "text": "Thanks for calling, you've reached technical support. My name is Yiezel Delphinus, who am I speaking with today?",
+    "pii_redacted": "Thanks for calling, you've reached technical support. My name is Yiezel Delphinus, who am I speaking with today?"
   },
   {
     "speaker": "caller",

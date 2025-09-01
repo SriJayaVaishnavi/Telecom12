@@ -1,39 +1,141 @@
+// src/components/NotesWrapUp.js
 import React from 'react';
 
-const NotesWrapUp = ({ wrapUp, sms, smsSent, onGenerateSummary, onSendSms }) => {
+const NotesWrapUp = ({
+  wrapUp,
+  sms,
+  smsSent,
+  onGenerateSummary,
+  onSendSms,
+  onUpdateWrapUp
+}) => {
+  // 🔍 Debug: Log every time this component renders
+  console.log("🔄 NotesWrapUp: Component rendered");
+  console.log("📝 wrapUp:", wrapUp);
+  console.log("📤 onGenerateSummary type:", typeof onGenerateSummary);
+  console.log("📤 onGenerateSummary value:", onGenerateSummary);
+
+  // 🛡️ Safe handler with fallback
+  const handleGenerateClick = () => {
+    console.log("🎯 [NotesWrapUp] Generate AI Summary button clicked!");
+
+    if (typeof onGenerateSummary === 'function') {
+      console.log("✅ Calling onGenerateSummary()");
+      onGenerateSummary();
+    } else {
+      console.error("❌ onGenerateSummary is not a function!", onGenerateSummary);
+      alert("Error: AI Summary function is not available. Check the console.");
+    }
+  };
+
+  const handleSendSmsClick = () => {
+    if (typeof onSendSms === 'function') {
+      onSendSms();
+    }
+  };
+
   return (
-    <div className="card">
-      <h4>AI-Generated Wrap-Up</h4>
+    <div className="notes-wrapup" style={{ marginTop: '16px', padding: '16px', fontFamily: 'Arial, sans-serif' }}>
+      <h3 style={{ margin: '0 0 12px 0', fontSize: '16px', color: '#1a1a1a' }}>
+        AI-Generated Wrap-Up
+      </h3>
+
+      {/* 🔥 Generate AI Summary Button */}
       <button
-        className="btn btn-primary"
-        onClick={onGenerateSummary}
-        disabled={wrapUp.summary}
+        onClick={handleGenerateClick}
+        style={{
+          marginBottom: '16px',
+          padding: '10px 16px',
+          backgroundColor: '#0066cc',
+          color: 'white',
+          border: 'none',
+          borderRadius: '6px',
+          cursor: 'pointer',
+          fontSize: '14px'
+        }}
       >
         Generate AI Summary
       </button>
 
-      {wrapUp.summary && (
-        <div className="wrap-up-content">
-          <h5>Summary</h5>
-          <textarea readOnly value={wrapUp.summary} />
-          <h5>Disposition</h5>
-          <input type="text" readOnly value={wrapUp.disposition} />
-          <h5>Case Notes</h5>
-          <textarea readOnly value={wrapUp.notes} rows={4} />
-        </div>
-      )}
-
-      <div className="sms-section">
-        <button
-          className="btn btn-secondary"
-          onClick={onSendSms}
-          disabled={smsSent}
-        >
-          {smsSent ? 'SMS Sent!' : 'Send SMS Follow-up'}
-        </button>
-        {smsSent && <p className="sms-confirmation">Confirmation sent to customer.</p>}
-        <p><small>Template: {sms.text}</small></p>
+      {/* Summary Field */}
+      <div className="field-group" style={{ marginBottom: '12px' }}>
+        <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold', color: '#333' }}>
+          Summary
+        </label>
+        <textarea
+          value={wrapUp.summary}
+          onChange={(e) => onUpdateWrapUp('summary', e.target.value)}
+          rows="3"
+          style={{
+            width: '100%',
+            fontSize: '14px',
+            padding: '8px',
+            border: '1px solid #ccc',
+            borderRadius: '4px',
+            boxSizing: 'border-box'
+          }}
+          placeholder="Enter summary..."
+        />
       </div>
+
+      {/* Disposition Field */}
+      <div className="field-group" style={{ marginBottom: '12px' }}>
+        <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold', color: '#333' }}>
+          Disposition
+        </label>
+        <input
+          type="text"
+          value={wrapUp.disposition}
+          onChange={(e) => onUpdateWrapUp('disposition', e.target.value)}
+          style={{
+            width: '100%',
+            fontSize: '14px',
+            padding: '8px',
+            border: '1px solid #ccc',
+            borderRadius: '4px',
+            boxSizing: 'border-box'
+          }}
+          placeholder="Enter disposition..."
+        />
+      </div>
+
+      {/* Case Notes Field */}
+      <div className="field-group" style={{ marginBottom: '12px' }}>
+        <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold', color: '#333' }}>
+          Case Notes
+        </label>
+        <textarea
+          value={wrapUp.notes}
+          onChange={(e) => onUpdateWrapUp('notes', e.target.value)}
+          rows="4"
+          style={{
+            width: '100%',
+            fontSize: '14px',
+            padding: '8px',
+            border: '1px solid #ccc',
+            borderRadius: '4px',
+            boxSizing: 'border-box'
+          }}
+          placeholder="Enter case notes..."
+        />
+      </div>
+
+      {/* Send SMS Button */}
+      <button
+        onClick={handleSendSmsClick}
+        disabled={smsSent}
+        style={{
+          padding: '10px 16px',
+          backgroundColor: smsSent ? '#6c757d' : '#28a745',
+          color: 'white',
+          border: 'none',
+          borderRadius: '6px',
+          cursor: smsSent ? 'not-allowed' : 'pointer',
+          fontSize: '14px'
+        }}
+      >
+        {smsSent ? 'SMS Sent' : 'Send SMS to Customer'}
+      </button>
     </div>
   );
 };
