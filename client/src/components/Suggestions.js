@@ -1,21 +1,46 @@
-import React from 'react';
-
-const getConfidenceClass = (confidence) => {
-  if (confidence >= 0.8) return 'confidence-green';
-  if (confidence >= 0.6) return 'confidence-amber';
-  return 'confidence-grey';
-};
+// src/components/Suggestions.js
 
 const Suggestions = ({ suggestions }) => {
+  const safeSuggestions = Array.isArray(suggestions) ? suggestions : [];
+
+  if (safeSuggestions.length === 0) {
+    return (
+      <div style={{
+        margin: '16px 0',
+        padding: '12px',
+        backgroundColor: '#f9f9fb',
+        borderRadius: '8px',
+        border: '1px solid #e0e0e0',
+        fontFamily: 'Segoe UI, sans-serif'
+      }}>
+        <h3 style={{ margin: 0, color: '#1a1a1a', fontSize: '16px' }}>AI Assistant</h3>
+        <p style={{ color: '#777', marginTop: '8px' }}>No suggestions available.</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="card">
-      <h4>Suggestions</h4>
-      {suggestions.map((suggestion, index) => (
-        <div key={index} className={`card ${getConfidenceClass(suggestion.confidence)}`}>
-          <h5>{suggestion.title} (Confidence: {suggestion.confidence * 100}%)</h5>
-          <p><strong>Reason:</strong> {suggestion.reason}</p>
-        </div>
-      ))}
+    <div style={{
+      margin: '16px 0',
+      padding: '12px',
+      backgroundColor: '#f9f9fb',
+      borderRadius: '8px',
+      border: '1px solid #e0e0e0',
+      fontFamily: 'Segoe UI, sans-serif'
+    }}>
+      <h3 style={{ margin: 0, color: '#1a1a1a', fontSize: '16px' }}>AI Assistant Suggestions</h3>
+      <ul style={{ listStyle: 'none', padding: 0, margin: '8px 0 0' }}>
+        {safeSuggestions.map((suggestion, index) => (
+          <li key={index} style={{
+            padding: '8px 0',
+            borderBottom: '1px solid #eee',
+            fontSize: '14px',
+            color: '#212121'
+          }}>
+            <strong style={{ color: '#0066cc' }}>{suggestion}</strong>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 };
