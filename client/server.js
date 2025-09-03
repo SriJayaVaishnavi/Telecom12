@@ -1,5 +1,4 @@
 // server.js
-// Run this from your client/ folder: node server.js
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
@@ -7,14 +6,16 @@ const fs = require("fs");
 const path = require("path");
 const { createServer } = require("http");
 const { WebSocketServer } = require("ws");
+const { spawn } = require("child_process");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Create HTTP and WebSocket servers
 const server = createServer(app);
-const wss = new WebSocketServer({ port: 3001 });
-console.log("✅ WebSocket server running on ws://localhost:3001");
+const wss = new WebSocketServer({ port: 0 });
+const WS_PORT = wss.address().port;
+console.log(`✅ WebSocket server running on ws://localhost:${WS_PORT}`);
 
 // ✅ Serve static files (audio) from client/src/data
 const dataPath = path.join(__dirname, "src", "data");
@@ -23,29 +24,13 @@ console.log("🔊 Audio available at http://localhost:5000/audio/mock_call.mp3")
 
 app.use(
   cors({
-    origin: "http://localhost:3002", // ✅ Match your React app's port
+    origin: "http://localhost:3001", // ✅ Match your frontend port
     credentials: true,
   })
 );
 
 // Parse JSON bodies
 app.use(express.json());
-
-// ✅ Simulate real-time transcription via WebSocket
-setInterval(() => {
-  const mockMessages = [
-    { speaker: "Customer", text: "Hi, my internet keeps dropping every few minutes." },
-    { speaker: "Agent", text: "Thanks, let me run a diagnostic." },
-    { speaker: "Customer", text: "It started after last night's update." },
-    { speaker: "Agent", text: "I'll check the line stats." },
-  ];
-  const msg = mockMessages[Math.floor(Math.random() * mockMessages.length)];
-  wss.clients.forEach((client) => {
-    if (client.readyState === client.OPEN) {
-      client.send(JSON.stringify(msg));
-    }
-  });
-}, 3000); // Send every 3 seconds
 
 // ✅ Paths to your JSON files
 const transcriptPath = path.join(__dirname, "src", "data", "transcript.json");
@@ -54,7 +39,6 @@ const ticketPath = path.join(__dirname, "src", "data", "ticket.json");
 // ✅ API Endpoint: /api/agent-suggestions
 app.get("/api/agent-suggestions", async (req, res) => {
   try {
-    // Check if required files exist
     if (!fs.existsSync(transcriptPath)) {
       throw new Error(`transcript.json not found at ${transcriptPath}`);
     }
@@ -62,11 +46,9 @@ app.get("/api/agent-suggestions", async (req, res) => {
       throw new Error(`ticket.json not found at ${ticketPath}`);
     }
 
-    // Read and parse transcript and ticket
     const transcript = JSON.parse(fs.readFileSync(transcriptPath, "utf-8"));
     const ticket = JSON.parse(fs.readFileSync(ticketPath, "utf-8"));
 
-    // Prepare prompt for Gemini
     const prompt = `
 You are an AI assistant for a telecom support agent.
 Based on the conversation and ticket, provide exactly 3 short, actionable suggestions.
@@ -89,7 +71,7 @@ ${transcript.slice(-6).map(msg => `${msg.speaker}: ${msg.text}`).join("\n")}
 {"suggestions": ["Suggestion 1", "Suggestion 2", "Suggestion 3"]}
 `;
 
-    // Call Gemini API
+    // ✅ Fix: Remove extra spaces in URL
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
       {
@@ -97,12 +79,8 @@ ${transcript.slice(-6).map(msg => `${msg.speaker}: ${msg.text}`).join("\n")}
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            maxOutputTokens: 100,
-            temperature: 0.4,
-            topP: 0.95,
-          },
-        }),
+          generationConfig: { maxOutputTokens: 100, temperature: 0.4 }
+        })
       }
     );
 
@@ -116,34 +94,19 @@ ${transcript.slice(-6).map(msg => `${msg.speaker}: ${msg.text}`).join("\n")}
     let suggestions = [];
 
     try {
-      // Extract response text
       const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-      if (!rawText) throw new Error("Empty or missing response from Gemini");
+      if (!rawText) throw new Error("Empty response");
 
-      console.log("Gemini raw response:", rawText); // Debug log
-
-      // ✅ Clean the response (remove ```json and ```)
       let cleanedText = rawText;
-      if (cleanedText.startsWith("```json")) {
-        cleanedText = cleanedText.substring(7);
-      } else if (cleanedText.startsWith("```")) {
-        cleanedText = cleanedText.substring(3);
-      }
-      if (cleanedText.endsWith("```")) {
-        cleanedText = cleanedText.substring(0, cleanedText.length - 3);
-      }
+      if (cleanedText.startsWith("```json")) cleanedText = cleanedText.substring(7);
+      if (cleanedText.startsWith("```")) cleanedText = cleanedText.substring(3);
+      if (cleanedText.endsWith("```")) cleanedText = cleanedText.substring(0, cleanedText.length - 3);
       cleanedText = cleanedText.trim();
 
-      console.log("Cleaned JSON:", cleanedText); // Debug log
-
-      // Parse cleaned JSON
       const parsed = JSON.parse(cleanedText);
-      suggestions = Array.isArray(parsed.suggestions)
-        ? parsed.suggestions.slice(0, 3) // Limit to 3
-        : [];
-    } catch (parseError) {
-      console.warn("Failed to parse Gemini response:", parseError.message);
-      console.log("Using fallback suggestions.");
+      suggestions = Array.isArray(parsed.suggestions) ? parsed.suggestions.slice(0, 3) : [];
+    } catch (err) {
+      console.warn("Fallback: Parsing failed", err.message);
       suggestions = [
         "Ask if the issue started after the update",
         "Run a line diagnostic test",
@@ -151,21 +114,20 @@ ${transcript.slice(-6).map(msg => `${msg.speaker}: ${msg.text}`).join("\n")}
       ];
     }
 
-    // ✅ Send suggestions to frontend
     res.json({ suggestions });
   } catch (err) {
     console.error("Error in /api/agent-suggestions:", err.message);
     res.status(500).json({
-      error: "Failed to fetch suggestions",
       suggestions: [
         "Ask if the issue started after the update",
         "Run a line diagnostic test",
         "Check firmware version"
-      ],
+      ]
     });
   }
 });
-// In server.js — Add this route below /api/agent-suggestions
+
+// ✅ API: /api/generate-summary
 app.post("/api/generate-summary", async (req, res) => {
   try {
     const { transcript, ticket, playbook } = req.body;
@@ -217,9 +179,7 @@ ${lastMessages}
       }
     );
 
-    if (!response.ok) {
-      throw new Error(`Gemini API error: ${await response.text()}`);
-    }
+    if (!response.ok) throw new Error(await response.text());
 
     const data = await response.json();
     const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
@@ -241,15 +201,84 @@ ${lastMessages}
     });
   }
 });
-// ✅ Health check endpoint
+
+// ✅ Health check
 app.get("/health", (req, res) => {
-  res.json({ status: "OK", timestamp: new Date().toISOString() });
+  res.json({ status: "OK" });
 });
 
-// Start server
+// ✅ REAL-TIME TRANSCRIPTION VIA PYTHON + WHISPER
+wss.on('connection', (ws) => {
+  console.log('🟢 WebSocket client connected – starting real-time transcription');
+
+  // List of 4 caller audio files
+  const callerFiles = [
+    'caller_0.wav',
+    'caller_1.wav',
+    'caller_2.wav',
+    'caller_3.wav'
+  ];
+
+  let index = 0;
+
+  function processNext() {
+    if (index >= callerFiles.length) {
+      console.log('✅ All caller audio files processed.');
+      ws.close();
+      return;
+    }
+
+    const file = callerFiles[index];
+    const audioPath = path.join(dataPath, file);
+
+    console.log(`🔊 Processing: ${audioPath}`);
+
+    const python = spawn('python', ['transcribe_audio.py', audioPath]);
+
+    let output = '';
+    python.stdout.on('data', (data) => output += data.toString());
+    python.stderr.on('data', (data) => console.error(`Python error: ${data}`));
+
+    python.on('close', (code) => {
+      if (code !== 0) {
+        console.error(`❌ Python script failed for ${file}`);
+        index++;
+        setTimeout(processNext, 1000);
+        return;
+      }
+
+      try {
+        const lines = output.trim().split('\n');
+        const lastLine = lines[lines.length - 1];
+        const msg = JSON.parse(lastLine);
+        const speaker = msg.speaker.toLowerCase() === 'caller' ? 'Customer' : 'Agent';
+
+        ws.send(JSON.stringify({ speaker, text: msg.text }));
+        console.log(`👤 Caller: ${msg.text}`);
+      } catch (err) {
+        console.error('Parse error:', err);
+      }
+
+      index++;
+      setTimeout(processNext, 2000); // Delay between files
+    });
+  }
+
+  processNext();
+});
+
+app.post('/api/start-call', (req, res) => {
+  console.log('🚀 Starting auto-call simulation...');
+  import('./auto_call_simulator.js')
+    .then(({ start }) => start())
+    .catch(err => console.error('Failed to start simulation:', err));
+  res.json({ status: 'Simulation started' });
+});
+
+// ✅ Start server
 server.listen(PORT, () => {
   console.log(`✅ Backend server running on http://localhost:${PORT}`);
   console.log(`💡 API: http://localhost:${PORT}/api/agent-suggestions`);
   console.log(`🔊 Audio: http://localhost:${PORT}/audio/mock_call.mp3`);
-  console.log(`📡 WebSocket: ws://localhost:3001`);
+  console.log(`📡 WebSocket: ws://localhost:${WS_PORT}`);
 });

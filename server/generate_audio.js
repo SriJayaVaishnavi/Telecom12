@@ -1,98 +1,105 @@
-// server/generate_audio.js
-const fs = require("fs");
-const path = require("path");
-const https = require('https');
-const ffmpeg = require('fluent-ffmpeg');
-const ffmpegStatic = require('ffmpeg-static');
-const ffprobeStatic = require('ffprobe-static');
+// server/generate_caller_audio.js
+import fs from 'fs';
+import path from 'path';
+import { exec } from 'child_process';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
 
-ffmpeg.setFfmpegPath(ffmpegStatic);
-ffmpeg.setFfprobePath(ffprobeStatic.path);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
-// ✅ Load transcript
+// Output directory
+const dataDir = path.join(__dirname, "src", "data");
+if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+}
+
+// Load transcript
 const transcriptPath = path.join(__dirname, "..", "client", "src", "data", "transcript.json");
 let transcript;
 try {
-  transcript = JSON.parse(fs.readFileSync(transcriptPath, "utf-8"));
+    const transcriptContent = fs.readFileSync(transcriptPath, "utf-8");
+    transcript = JSON.parse(transcriptContent);
+    console.log("Transcript loaded successfully");
 } catch (err) {
-  console.error("❌ Failed to load transcript.json:", err.message);
-  process.exit(1);
+    console.error("❌ Failed to load transcript.json:", err.message);
+    process.exit(1);
 }
 
-// ✅ Output directory
-const dataDir = path.join(__dirname, "src", "data");
-if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+// Filter for caller turns (assuming caller is the one who isn't the agent)
+const callerTurns = transcript.filter(t => t.speaker && t.speaker.toLowerCase() !== "agent");
 
-// Clean up old files (.mp3 and .wav)
-fs.readdirSync(dataDir).forEach(file => {
-  if (file.endsWith('.mp3') || file.endsWith('.wav')) {
-    fs.unlinkSync(path.join(dataDir, file));
-  }
-});
+if (callerTurns.length === 0) {
+    console.log("No caller turns found in the transcript. Please check your transcript.json");
+    process.exit(0);
+}
 
-const tempFiles = [];
+console.log(`Found ${callerTurns.length} caller turns to process`);
+
+// PowerShell voice: UK English (Hazel) for caller
+const voiceName = "Microsoft David Desktop"; // Changed to a male voice for caller
 let filesGenerated = 0;
 
-// Generate audio for each turn
-transcript.forEach((turn, index) => {
-  if (!turn.speaker || !turn.text) return;
-
-  const speaker = turn.speaker.toLowerCase();
-  const duration = Math.min(4, Math.max(1, turn.text.split(' ').length * 0.3)); // ~0.3 sec per word
-
-  // Set voice characteristics
-  const speed = speaker === "agent" ? 0.9 : 1.1; // Agent slower, customer faster
-  const wavPath = path.join(dataDir, `turn_${index}.wav`);
-
-  console.log(`🔊 Generating audio for [${turn.speaker}]: "${turn.text}" → ${wavPath}`);
-
-  // Generate synthetic audio using silence with adjusted tempo
-  ffmpeg()
-    .input('anullsrc')
-    .inputFormat('lavfi')
-    .duration(duration)
-    .audioFrequency(22050)
-    .audioChannels(1)
-    .audioBitrate('64k')
-    .audioFilters(`atempo=${speed}`)
-    .save(wavPath)
-    .on('end', () => {
-      console.log(`✅ Generated: ${wavPath}`);
-      tempFiles[index] = wavPath;
-      next();
-    })
-    .on('error', (err) => {
-      console.error(`❌ FFmpeg error for "${turn.text}":`, err);
-      tempFiles[index] = wavPath; // Still proceed
-      next();
-    });
+// Clean up old caller files
+const oldFiles = fs.readdirSync(dataDir).filter(f => f.startsWith("caller_") && f.endsWith(".wav"));
+oldFiles.forEach(f => {
+    try {
+        fs.unlinkSync(path.join(dataDir, f));
+        console.log(`Removed old file: ${f}`);
+    } catch (err) {
+        console.error(`Error removing old file ${f}:`, err.message);
+    }
 });
 
-function next() {
-  filesGenerated++;
-  if (filesGenerated === transcript.length) {
-    // ✅ Merge all .wav files into final .wav (not .mp3)
-    const output = path.join(dataDir, 'mock_call.wav'); // ← Now .wav
-    const merger = ffmpeg();
+// Generate audio for each caller turn
+callerTurns.forEach((turn, index) => {
+    // Escape single quotes and backslashes for PowerShell
+    const safeText = turn.text.replace(/'/g, "''").replace(/\\/g, '\\\\');
+    const outputPath = path.join(dataDir, `caller_${index}.wav`).replace(/\\/g, '\\\\');
 
-    tempFiles.forEach(f => {
-      if (fs.existsSync(f)) {
-        merger.input(f);
-      }
+    // Create a temporary PowerShell script file
+    const psScript = `
+        Add-Type -AssemblyName System.Speech;
+        $speak = New-Object System.Speech.Synthesis.SpeechSynthesizer;
+        $speak.SelectVoice('${voiceName}');
+        $speak.Rate = 0;
+        $speak.Volume = 100;
+        $speak.SetOutputToWaveFile('${outputPath}');
+        $speak.Speak('${safeText}');
+        $speak.Dispose();
+    `;
+
+    // Write the script to a temporary file
+    const tempScriptPath = path.join(dataDir, `temp_${index}.ps1`);
+    fs.writeFileSync(tempScriptPath, psScript);
+    
+    console.log(`Generating audio for caller [${index}]: "${turn.text}"`);
+    
+    // Execute the PowerShell script
+    const cmd = `powershell -ExecutionPolicy Bypass -File "${tempScriptPath}"`;
+    
+    exec(cmd, (error, stdout, stderr) => {
+        // Clean up the temporary script file
+        try {
+            fs.unlinkSync(tempScriptPath);
+        } catch (e) {
+            console.error(`Warning: Could not delete temporary script file: ${e.message}`);
+        }
+
+        if (error) {
+            console.error(`❌ Failed to generate caller_${index}.wav:`, error.message);
+            return;
+        }
+        if (stderr) {
+            console.error(`⚠️ PowerShell stderr for caller_${index}.wav:`, stderr);
+        } else {
+            filesGenerated++;
+            console.log(`✅ Generated: ${outputPath} (${filesGenerated}/${callerTurns.length})`);
+            
+            if (filesGenerated === callerTurns.length) {
+                console.log(`\n🎉 Successfully generated ${filesGenerated} caller audio files!`);
+                console.log(`Output directory: ${dataDir}`);
+            }
+        }
     });
-
-    merger
-      .mergeToFile(output)
-      .on('end', () => {
-        console.log(`✅ Final call audio saved as: ${output}`);
-        // Cleanup temporary turn files
-        tempFiles.forEach(f => {
-          if (fs.existsSync(f)) fs.unlinkSync(f);
-        });
-        console.log('🗑️ Temporary files cleaned up');
-      })
-      .on('error', (err) => {
-        console.error('❌ Merge error:', err);
-      });
-  }
-}
+});

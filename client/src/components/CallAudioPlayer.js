@@ -1,30 +1,45 @@
-// src/components/CallAudioPlayer.js
+// components/CallAudioPlayer.js
 import React, { useRef } from 'react';
 
-const CallAudioPlayer = React.forwardRef((props, ref) => {
+const CallAudioPlayer = () => {
   const audioRef = useRef(null);
+  const queueRef = useRef([]);
 
-  const playAudio = () => {
+  const playAudio = (sources) => {
+    queueRef.current = [...sources];
+    playNext();
+  };
+
+  const playNext = () => {
+    if (queueRef.current.length === 0) return;
+
+    const nextSrc = queueRef.current.shift();
     const audio = audioRef.current;
     if (audio) {
+      audio.src = nextSrc;
       const playPromise = audio.play();
       playPromise
-        .then(() => console.log("🎧 Audio playing"))
-        .catch(err => console.error("🔇 Play failed:", err));
+        .then(() => console.log("🔊 Playing:", nextSrc))
+        .catch(err => {
+          console.error("🔇 Play failed:", err);
+          playNext(); // Skip to next if failed
+        });
     }
   };
 
-  React.useImperativeHandle(ref, () => ({ playAudio }));
+  const handleEnded = () => {
+    playNext();
+  };
 
   return (
     <div style={{ display: 'none' }}>
       <audio
         ref={audioRef}
-        src="http://localhost:5000/audio/mock_call.mp3"
+        onEnded={handleEnded}
         preload="auto"
       />
     </div>
   );
-});
+};
 
 export default CallAudioPlayer;
