@@ -1,25 +1,45 @@
-\# server/transcribe_audio.py
 import sys
 import json
 from pathlib import Path
+from faster_whisper import WhisperModel
 
-audio_file = sys.argv[1] if len(sys.argv) > 1 else None
-if not audio_file or not Path(audio_file).exists():
-    print('{"error": "Audio file not found"}')
-    exit(1)
+# Initialize the Whisper model
+# Using a smaller model for speed, can be changed to "large-v2" for accuracy
+MODEL_SIZE = "base.en"
+try:
+    model = WhisperModel(MODEL_SIZE, device="cpu", compute_type="int8")
+except Exception as e:
+    print(json.dumps({"error": f"Failed to load Whisper model: {e}"}))
+    sys.exit(1)
 
-# Simulate Whisper transcription (replace with real Whisper later)
-# In real use, call faster-whisper or openai-whisper
-import random
+def transcribe(audio_path):
+    """
+    Transcribes a given audio file using the Whisper model.
+    """
+    try:
+        segments, _ = model.transcribe(audio_path, beam_size=5)
+        transcription = " ".join([seg.text for seg in segments])
+        return transcription.strip()
+    except Exception as e:
+        return f"Error during transcription: {e}"
 
-responses = {
-    "caller_0.wav": "Hi, this is Jennifer Miller.",
-    "caller_1.wav": "Sure, it's May 15th, 1985, and the zip is 10001.",
-    "caller_2.wav": "Great, thanks for verifying. So what seems to be the problem?",
-    "caller_3.wav": "My internet keeps dropping out. It only started after my router got that new 3.14.2 firmware update."
-}
+if __name__ == "__main__":
+    # Check for audio file argument
+    if len(sys.argv) < 2:
+        print(json.dumps({"error": "No audio file path provided"}))
+        sys.exit(1)
 
-filename = Path(audio_file).name
-text = responses.get(filename, "Unknown caller message")
+    audio_file = sys.argv[1]
+    if not Path(audio_file).exists():
+        print(json.dumps({"error": f"Audio file not found: {audio_file}"}))
+        sys.exit(1)
 
-print(json.dumps({"speaker": "caller", "text": text}))
+    # Transcribe the audio file
+    transcribed_text = transcribe(audio_file)
+
+    # Output the result as JSON
+    result = {
+        "speaker": "Customer",  # Assuming the audio is always from the customer
+        "text": transcribed_text
+    }
+    print(json.dumps(result))

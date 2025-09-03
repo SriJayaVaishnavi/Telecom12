@@ -7,24 +7,24 @@ const path = require("path");
 const { createServer } = require("http");
 const { WebSocketServer } = require("ws");
 const { spawn } = require("child_process");
+const { getAudioDurationInSeconds } = require("get-audio-duration");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Create HTTP and WebSocket servers
 const server = createServer(app);
-const wss = new WebSocketServer({ port: 0 });
-const WS_PORT = wss.address().port;
-console.log(`✅ WebSocket server running on ws://localhost:${WS_PORT}`);
+const wss = new WebSocketServer({ port: 3001 });
+console.log(`✅ WebSocket server running on ws://localhost:3001`);
 
-// ✅ Serve static files (audio) from client/src/data
-const dataPath = path.join(__dirname, "src", "data");
-app.use("/audio", express.static(dataPath));
-console.log("🔊 Audio available at http://localhost:5000/audio/mock_call.mp3");
+// ✅ Serve static files (audio) from server/src/data
+const audioDataPath = path.join(__dirname, "..", "server", "src", "data");
+app.use("/audio", express.static(audioDataPath));
+console.log(`🔊 Audio available at http://localhost:5000/audio/caller_0.wav`);
 
 app.use(
   cors({
-    origin: "http://localhost:3001", // ✅ Match your frontend port
+    origin: "http://localhost:3000", // ✅ Match your frontend port
     credentials: true,
   })
 );
@@ -207,78 +207,139 @@ app.get("/health", (req, res) => {
   res.json({ status: "OK" });
 });
 
-// ✅ REAL-TIME TRANSCRIPTION VIA PYTHON + WHISPER
+let conversationHistory = [];
+
+// Handle WebSocket connections
 wss.on('connection', (ws) => {
-  console.log('🟢 WebSocket client connected – starting real-time transcription');
-
-  // List of 4 caller audio files
-  const callerFiles = [
-    'caller_0.wav',
-    'caller_1.wav',
-    'caller_2.wav',
-    'caller_3.wav'
-  ];
-
-  let index = 0;
-
-  function processNext() {
-    if (index >= callerFiles.length) {
-      console.log('✅ All caller audio files processed.');
-      ws.close();
-      return;
-    }
-
-    const file = callerFiles[index];
-    const audioPath = path.join(dataPath, file);
-
-    console.log(`🔊 Processing: ${audioPath}`);
-
-    const python = spawn('python', ['transcribe_audio.py', audioPath]);
-
-    let output = '';
-    python.stdout.on('data', (data) => output += data.toString());
-    python.stderr.on('data', (data) => console.error(`Python error: ${data}`));
-
-    python.on('close', (code) => {
-      if (code !== 0) {
-        console.error(`❌ Python script failed for ${file}`);
-        index++;
-        setTimeout(processNext, 1000);
-        return;
-      }
-
-      try {
-        const lines = output.trim().split('\n');
-        const lastLine = lines[lines.length - 1];
-        const msg = JSON.parse(lastLine);
-        const speaker = msg.speaker.toLowerCase() === 'caller' ? 'Customer' : 'Agent';
-
-        ws.send(JSON.stringify({ speaker, text: msg.text }));
-        console.log(`👤 Caller: ${msg.text}`);
-      } catch (err) {
-        console.error('Parse error:', err);
-      }
-
-      index++;
-      setTimeout(processNext, 2000); // Delay between files
-    });
-  }
-
-  processNext();
+  console.log('🟢 WebSocket client connected');
+  ws.on('close', () => console.log('🔴 WebSocket client disconnected'));
 });
 
-app.post('/api/start-call', (req, res) => {
+function broadcast(message) {
+  wss.clients.forEach(client => {
+    if (client.readyState === 1) { // WebSocket.OPEN
+      client.send(JSON.stringify(message));
+    }
+  });
+}
+
+async function getGeminiReply(text) {
+  const prompt = `
+You are a helpful and friendly call center agent named Jennifer Miller.
+A customer is on the line. Respond naturally based on their last message.
+Keep your responses concise and to the point.
+
+Conversation History:
+${conversationHistory.map(m => `${m.speaker}: ${m.text}`).join("\n")}
+
+Customer: "${text}"
+Agent:
+`;
+
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { maxOutputTokens: 150, temperature: 0.7 }
+        })
+      }
+    );
+    if (!response.ok) throw new Error(await response.text());
+    const data = await response.json();
+    return data.candidates[0].content.parts[0].text.trim();
+  } catch (error) {
+    console.error("Error calling Gemini API:", error);
+    return "I'm having trouble connecting to my systems right now. Please hold on.";
+  }
+}
+
+function transcribeAudio(audioPath) {
+  const scriptPath = path.join(__dirname, '..', 'server', 'transcribe_audio.py');
+  return new Promise((resolve, reject) => {
+    const python = spawn('python', [scriptPath, audioPath]);
+    let output = '';
+    python.stdout.on('data', (data) => output += data.toString());
+    python.stderr.on('data', (data) => console.error(`Python stderr: ${data}`));
+    python.on('close', (code) => {
+      if (code !== 0) return reject(`Transcription failed with code ${code}`);
+      try {
+        const result = JSON.parse(output.trim().split('\n').pop());
+        resolve(result.text);
+      } catch (e) {
+        reject('Failed to parse transcription output');
+      }
+    });
+  });
+}
+
+app.post('/api/start-simulation', async (req, res) => {
   console.log('🚀 Starting auto-call simulation...');
-  import('./auto_call_simulator.js')
-    .then(({ start }) => start())
-    .catch(err => console.error('Failed to start simulation:', err));
   res.json({ status: 'Simulation started' });
+
+  conversationHistory = [];
+
+  const agentIntro = { speaker: "Agent", text: "Thank you for calling technical support. My name is Jennifer Miller. Can I have your date of birth and ZIP code to verify your account?" };
+  conversationHistory.push(agentIntro);
+  broadcast(agentIntro);
+
+  const callerAudios = ["caller_0.wav", "caller_1.wav", "caller_2.wav", "caller_3.wav"];
+
+  for (const audioFile of callerAudios) {
+    await new Promise(resolve => setTimeout(resolve, 1000)); // Small delay
+
+    const audioPath = path.join(audioDataPath, audioFile);
+    const audioUrl = `http://localhost:${PORT}/audio/${audioFile}`;
+
+    // 1. Play audio on client
+    broadcast({ action: 'play', url: audioUrl });
+
+    // 2. Transcribe audio
+    try {
+      const duration = await getAudioDurationInSeconds(audioPath);
+      await new Promise(resolve => setTimeout(resolve, (duration * 1000) + 500)); // Wait for audio to play
+
+      const transcriptText = await transcribeAudio(audioPath);
+      const callerTurn = { speaker: "Customer", text: transcriptText };
+      conversationHistory.push(callerTurn);
+      broadcast(callerTurn);
+      console.log(`👤 Customer: ${transcriptText}`);
+
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // 3. Get Gemini reply
+      let agentReplyText;
+      if (audioFile === 'caller_2.wav') {
+        agentReplyText = "I’m transferring you to a human agent who can help further.";
+      } else {
+        agentReplyText = await getGeminiReply(transcriptText);
+      }
+
+      const agentTurn = { speaker: "Agent", text: agentReplyText };
+      conversationHistory.push(agentTurn);
+      broadcast(agentTurn);
+      console.log(`🎙️ Agent: ${agentReplyText}`);
+
+      if (audioFile === 'caller_2.wav') {
+        console.log('Call handoff initiated. Ending simulation.');
+        break;
+      }
+
+    } catch (error) {
+      console.error(`Error during simulation for ${audioFile}:`, error);
+      broadcast({ speaker: "System", text: `Error processing ${audioFile}.` });
+    }
+  }
+  console.log("✅ Auto-call simulation complete.");
 });
 
 // ✅ Start server
 server.listen(PORT, () => {
   console.log(`✅ Backend server running on http://localhost:${PORT}`);
   console.log(`💡 API: http://localhost:${PORT}/api/agent-suggestions`);
-  console.log(`🔊 Audio: http://localhost:${PORT}/audio/mock_call.mp3`);
-  console.log(`📡 WebSocket: ws://localhost:${WS_PORT}`);
+  console.log(`🔊 Audio: http://localhost:${PORT}/audio/caller_0.wav`);
+  console.log(`📡 WebSocket: ws://localhost:3001`);
 });
