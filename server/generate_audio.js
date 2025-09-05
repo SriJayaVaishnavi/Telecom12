@@ -20,7 +20,7 @@ let transcript;
 try {
     const transcriptContent = fs.readFileSync(transcriptPath, "utf-8");
     transcript = JSON.parse(transcriptContent);
-    console.log("Transcript loaded successfully");
+    console.log("📜 Transcript loaded successfully");
 } catch (err) {
     console.error("❌ Failed to load transcript.json:", err.message);
     process.exit(1);
@@ -30,76 +30,69 @@ try {
 const callerTurns = transcript.filter(t => t.speaker && t.speaker.toLowerCase() !== "agent");
 
 if (callerTurns.length === 0) {
-    console.log("No caller turns found in the transcript. Please check your transcript.json");
+    console.log("⚠️ No caller turns found in the transcript. Please check transcript.json");
     process.exit(0);
 }
 
-console.log(`Found ${callerTurns.length} caller turns to process`);
+console.log(`📞 Found ${callerTurns.length} caller turns`);
 
-// PowerShell voice: UK English (Hazel) for caller
-const voiceName = "Microsoft David Desktop"; // Changed to a male voice for caller
-let filesGenerated = 0;
+// Combine all caller turns into a single paragraph
+const callerText = callerTurns.map(t => t.text.trim()).join(" ");
+console.log(`📝 Combined caller transcript:\n"${callerText}"`);
+
+// PowerShell voice (you can change this if needed)
+const voiceName = "Microsoft David Desktop"; 
+const outputPath = path.join(dataDir, "caller_full.wav").replace(/\\/g, '\\\\');
 
 // Clean up old caller files
 const oldFiles = fs.readdirSync(dataDir).filter(f => f.startsWith("caller_") && f.endsWith(".wav"));
 oldFiles.forEach(f => {
     try {
         fs.unlinkSync(path.join(dataDir, f));
-        console.log(`Removed old file: ${f}`);
+        console.log(`🗑️ Removed old file: ${f}`);
     } catch (err) {
         console.error(`Error removing old file ${f}:`, err.message);
     }
 });
 
-// Generate audio for each caller turn
-callerTurns.forEach((turn, index) => {
-    // Escape single quotes and backslashes for PowerShell
-    const safeText = turn.text.replace(/'/g, "''").replace(/\\/g, '\\\\');
-    const outputPath = path.join(dataDir, `caller_${index}.wav`).replace(/\\/g, '\\\\');
+// Escape special characters for PowerShell
+const safeText = callerText.replace(/'/g, "''").replace(/\\/g, '\\\\');
 
-    // Create a temporary PowerShell script file
-    const psScript = `
-        Add-Type -AssemblyName System.Speech;
-        $speak = New-Object System.Speech.Synthesis.SpeechSynthesizer;
-        $speak.SelectVoice('${voiceName}');
-        $speak.Rate = 0;
-        $speak.Volume = 100;
-        $speak.SetOutputToWaveFile('${outputPath}');
-        $speak.Speak('${safeText}');
-        $speak.Dispose();
-    `;
+// Create a PowerShell script
+const psScript = `
+    Add-Type -AssemblyName System.Speech;
+    $speak = New-Object System.Speech.Synthesis.SpeechSynthesizer;
+    $speak.SelectVoice('${voiceName}');
+    $speak.Rate = 0;
+    $speak.Volume = 100;
+    $speak.SetOutputToWaveFile('${outputPath}');
+    $speak.Speak('${safeText}');
+    $speak.Dispose();
+`;
 
-    // Write the script to a temporary file
-    const tempScriptPath = path.join(dataDir, `temp_${index}.ps1`);
-    fs.writeFileSync(tempScriptPath, psScript);
-    
-    console.log(`Generating audio for caller [${index}]: "${turn.text}"`);
-    
-    // Execute the PowerShell script
-    const cmd = `powershell -ExecutionPolicy Bypass -File "${tempScriptPath}"`;
-    
-    exec(cmd, (error, stdout, stderr) => {
-        // Clean up the temporary script file
-        try {
-            fs.unlinkSync(tempScriptPath);
-        } catch (e) {
-            console.error(`Warning: Could not delete temporary script file: ${e.message}`);
-        }
+// Save the script temporarily
+const tempScriptPath = path.join(dataDir, "temp_caller.ps1");
+fs.writeFileSync(tempScriptPath, psScript);
 
-        if (error) {
-            console.error(`❌ Failed to generate caller_${index}.wav:`, error.message);
-            return;
-        }
-        if (stderr) {
-            console.error(`⚠️ PowerShell stderr for caller_${index}.wav:`, stderr);
-        } else {
-            filesGenerated++;
-            console.log(`✅ Generated: ${outputPath} (${filesGenerated}/${callerTurns.length})`);
-            
-            if (filesGenerated === callerTurns.length) {
-                console.log(`\n🎉 Successfully generated ${filesGenerated} caller audio files!`);
-                console.log(`Output directory: ${dataDir}`);
-            }
-        }
-    });
+// Run the PowerShell script
+console.log("🎙️ Generating full caller audio...");
+const cmd = `powershell -ExecutionPolicy Bypass -File "${tempScriptPath}"`;
+
+exec(cmd, (error, stdout, stderr) => {
+    // Clean up temporary file
+    try {
+        fs.unlinkSync(tempScriptPath);
+    } catch (e) {
+        console.error(`⚠️ Could not delete temporary script file: ${e.message}`);
+    }
+
+    if (error) {
+        console.error("❌ Failed to generate caller_full.wav:", error.message);
+        return;
+    }
+    if (stderr) {
+        console.error("⚠️ PowerShell stderr:", stderr);
+    }
+
+    console.log(`✅ Successfully generated full caller audio: ${outputPath}`);
 });

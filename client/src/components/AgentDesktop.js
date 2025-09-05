@@ -1,5 +1,5 @@
 // src/components/AgentDesktop.js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 import HeaderBar from './HeaderBar';
 import CRMPanel from './CRMPanel';
@@ -17,11 +17,14 @@ import ticketData from '../data/ticket.json'; // Must exist
 
 const AgentDesktop = () => {
   const [transcript, setTranscript] = useState([]);
-  const [intents, setIntents] = useState([]);
   const [suggestions, setSuggestions] = useState([]);
   const [playbook, setPlaybook] = useState(initialStepsData);
   const [wrapUp, setWrapUp] = useState({ summary: '', disposition: '', notes: '' });
   const [smsSent, setSmsSent] = useState(false);
+  const messageCountRef = useRef(0); // Track number of messages processed
+
+  // Refs for WebSocket
+  const wsRef = useRef(null);
 
   // ✅ Update wrap-up fields manually
   const handleUpdateWrapUp = (field, value) => {
@@ -30,42 +33,142 @@ const AgentDesktop = () => {
 
   // ✅ WebSocket: Real-time transcript
   useEffect(() => {
-    const ws = new WebSocket('ws://localhost:3001');
-    ws.onopen = () => console.log('WebSocket connected');
-    ws.onmessage = (event) => {
-      try {
-        const message = JSON.parse(event.data);
-        setTranscript(prev => [...prev, message]);
-      } catch (err) {
-        console.error("Invalid message received:", event.data);
+    const connectWebSocket = () => {
+      if (wsRef.current) {
+        console.log('[WS] Connection already exists, not creating a new one.');
+        return;
+      }
+
+      console.log('[WS] Connecting to ws://localhost:5000/transcribe');
+      const ws = new WebSocket('ws://localhost:5000/transcribe');
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        console.log('[WS] Connected successfully');
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data);
+          
+          // Ignore ping-pong and system messages
+          if (message.type || !message.speaker || !message.text) {
+            return;
+          }
+          
+          // Calculate delay based on message count
+          let delay;
+          messageCountRef.current += 1;
+          
+          if (messageCountRef.current === 1) {
+            delay = 15000; // 10 seconds for first message
+          } else if (messageCountRef.current === 2) {
+            delay = 17000; // 15 seconds for second message
+          } else {
+            delay = 22000; // 17 seconds for third and subsequent messages
+          }
+          
+          console.log(`🕒 Adding message with ${delay/1000} second delay`);
+          
+          setTimeout(() => {
+            // ✅ Add the message directly to the transcript using functional update
+            setTranscript(prevTranscript => {
+              // Avoid duplicates by checking the last message
+              const lastMsg = prevTranscript[prevTranscript.length - 1];
+              if (lastMsg && lastMsg.speaker === message.speaker && lastMsg.text === message.text) {
+                console.log(`🟨 Ignoring duplicate message: ${message.text}`);
+                return prevTranscript;
+              }
+              const newTranscript = [...prevTranscript, message];
+              
+              // Fetch suggestions with the updated transcript
+              fetchSuggestions(newTranscript);
+              
+              return newTranscript;
+            });
+          }, delay);
+          
+        } catch (err) {
+          console.error('[WS] Error processing message:', err, 'Data:', event.data);
+        }
+      };
+
+      ws.onclose = (e) => {
+        console.log(`[WS] Disconnected. Code: ${e.code}, Reason: ${e.reason || 'No reason provided'}`);
+        wsRef.current = null;
+      };
+
+      ws.onerror = (error) => {
+        console.error('[WS] Error:', error);
+      };
+    };
+
+    connectWebSocket();
+
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
       }
     };
-    ws.onclose = () => console.log('WebSocket disconnected');
-    ws.onerror = (err) => console.error('WebSocket error:', err);
-    return () => ws.close();
-  }, []);
+  }, []); // Empty dependency array
 
-  // ✅ Fetch AI Suggestions
+  // ✅ NEW: Save transcript to the static file
+  // This runs every time the transcript changes
   useEffect(() => {
-    async function fetchAISuggestions() {
-      try {
-        const res = await fetch('http://localhost:5000/api/agent-suggestions');
+    // This function simulates writing to the file system
+    // In a real React app, you can't write to the file system directly.
+    // However, for development, we can use a "fake" fetch to a backend endpoint
+    // that will save it, OR we can rely on the backend's WebSocket to do it.
+    
+    // For the absolute easiest way, let's assume your backend has an endpoint
+    // like /api/save-transcript that we can POST to.
+    
+    if (transcript.length > 0) {
+      fetch('http://localhost:5000/api/save-transcript', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(transcript)
+      })
+      .then(res => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        if (Array.isArray(data.suggestions)) {
-          setSuggestions(data.suggestions);
-        }
-      } catch (err) {
-        console.error('Error fetching AI suggestions:', err);
-        setSuggestions([
-          "Ask if the issue started after the firmware update.",
-          "Run a line diagnostic test.",
-          "Suggest a firmware rollback if flaps are detected."
-        ]);
-      }
+        console.log('✅ Transcript saved to server');
+      })
+      .catch(err => {
+        console.error('❌ Failed to save transcript:', err);
+      });
     }
-    fetchAISuggestions();
-  }, []);
+  }, [transcript]); // This runs whenever the transcript changes
+
+  // ✅ Fetch AI Suggestions - Accepts the current transcript
+  const fetchSuggestions = async (currentTranscript) => {
+    try {
+      const res = await fetch('http://localhost:5000/api/agent-suggestions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transcript: currentTranscript, ticket: ticketData })
+      });
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (Array.isArray(data.suggestions)) {
+        setSuggestions(data.suggestions);
+      }
+    } catch (err) {
+      console.error('Error fetching AI suggestions:', err);
+      setSuggestions([
+        "Ask if the issue started after the firmware update.",
+        "Run a line diagnostic test.",
+        "Suggest a firmware rollback if flaps are detected."
+      ]);
+    }
+  };
+
+  // ✅ Initial fetch for suggestions
+  useEffect(() => {
+    if (transcript.length > 0) {
+      fetchSuggestions(transcript);
+    }
+  }, [transcript]);
 
   // ✅ Handle step action in playbook
   const handleStepAction = (stepId) => {
@@ -85,14 +188,8 @@ const AgentDesktop = () => {
       return { ...prevPlaybook, steps: newSteps };
     });
   };
+
   const handleGenerateSummary = () => {
-    console.log("Generating AI summary with:", { transcript, ticket: ticketData, playbook });
-  
-    if (!ticketData) {
-      console.error("❌ ticketData is undefined!");
-      return;
-    }
-  
     fetch('http://localhost:5000/api/generate-summary', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -115,6 +212,7 @@ const AgentDesktop = () => {
       });
     });
   };
+
   // ✅ Send SMS
   const handleSendSms = () => {
     setSmsSent(true);
@@ -128,7 +226,7 @@ const AgentDesktop = () => {
       </div>
       <div className="live-assist-panel">
         <TranscriptPane transcript={transcript} />
-        <IntentChips intents={intents} />
+        <IntentChips intents={[]} />
         <Suggestions suggestions={suggestions} />
         <GuidedStepper playbook={playbook} onStepAction={handleStepAction} />
         <NotesWrapUp

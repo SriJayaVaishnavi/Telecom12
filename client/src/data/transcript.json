@@ -1,43 +1,18 @@
 [
   {
-    "speaker": "system",
-    "text": "Incoming call from (917) 555-0123"
+    "speaker": "Agent",
+    "text": "Thank you for calling technical support. My name is Jennifer Miller. To get started, could you please provide your date of birth and ZIP code for verification?"
   },
   {
-    "speaker": "agent",
-    "text": "Thanks for calling, you've reached technical support. My name is Yiezel Delphinus, who am I speaking with today?",
-    "pii_redacted": "Thanks for calling, you've reached technical support. My name is Yiezel Delphinus, who am I speaking with today?"
+    "speaker": "Customer",
+    "text": "Hi, this is Adrian Miller. My DOB is May 15, 1985, and the zip is 10,000. My internet keeps dropping out."
   },
   {
-    "speaker": "caller",
-    "text": "Hi, this is Adrian Miller.",
-    "pii_redacted": "Hi, this is [PERSON_NAME]."
+    "speaker": "Customer",
+    "text": "It only started after my router got that new 3.14.2 firmware update."
   },
   {
-    "speaker": "agent",
-    "text": "Hey Ms. Miller. I can help you with that. To pull up your account, can I get your date of birth and billing zip code?",
-    "pii_redacted": "Hey Ms. Miller. I can help you with that. To pull up your account, can I get your [DOB] and your [ZIP_CODE]?"
-  },
-  {
-    "speaker": "caller",
-    "text": "Sure, it's May 15th, 1985, and the zip is 10001.",
-    "pii_redacted": "Sure, it's [DOB], and the zip is [ZIP_CODE]."
-  },
-  {
-    "speaker": "agent",
-    "text": "Great, thanks for verifying. So what seems to be the problem?",
-    "pii_redacted": "Great, thanks for verifying. So what seems to be the problem?"
-  },
-  {
-    "speaker": "caller",
-    "text": "My internet keeps dropping out. It only started after my router got that new 3.14.2 firmware update.",
-    "pii_redacted": "My internet keeps dropping out. It only started after my router got that new 3.14.2 firmware update.",
-    "intent": "connection_issue",
-    "entities": {
-      "product": "internet",
-      "problem": "disconnects",
-      "cause": "firmware_update",
-      "version": "3.14.2"
-    }
+    "speaker": "Agent",
+    "text": "I understand your internet is dropping since the firmware update, Adrian. I'm seeing intermittent connectivity issues on our end; let's try reverting your router's firmware."
   }
 ]
