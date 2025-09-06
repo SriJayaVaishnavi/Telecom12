@@ -1,9 +1,137 @@
-{
-  "id": "EUC-23417",
-  "title": "Frequent disconnects after ONT firmware update to 3.14.2",
-  "status": "Resolved",
-  "created_at": "2024-08-26T10:15:00Z",
-  "resolution": "Rolled back ONT firmware from 3.14.2 to 3.12.9. Confirmed stability with customer.",
-  "customer_impact": "Multiple customers on Fiber 200 plan with ZX-900 ONT reported link flaps after the automatic firmware push of v3.14.2.",
-  "notes": "Root cause identified as a regression in the new firmware's handling of specific line conditions. Engineering team is aware and working on a hotfix (JIRA: FIB-9821). Interim solution is to roll back affected customers to v3.12.9."
-}
+[
+  {
+    "id": "EUC-23417",
+    "title": "Frequent disconnects after ONT firmware update to 3.14.2",
+    "status": "Resolved",
+    "created_at": "2024-08-26T10:15:00Z",
+    "resolution": "Rolled back ONT firmware from 3.14.2 to 3.12.9. Confirmed stability with customer.",
+    "customer_impact": "Multiple customers on Fiber 200 plan with ZX-900 ONT reported link flaps after the automatic firmware push of v3.14.2.",
+    "notes": "Root cause identified as a regression in the new firmware's handling of specific line conditions. Engineering team is aware and working on a hotfix (JIRA: FIB-9821). Interim solution is to roll back affected customers to v3.12.9."
+  },
+  {
+    "id": "EUC-23418",
+    "title": "Billing discrepancy for postpaid mobile plan",
+    "status": "Open",
+    "created_at": "2024-08-27T08:45:00Z",
+    "resolution": "",
+    "customer_impact": "Customer reported double charges for international roaming in August invoice.",
+    "notes": "Escalated to billing support team. Need to verify CDR logs and reverse duplicate charges if valid."
+  },
+  {
+    "id": "EUC-23419",
+    "title": "Low 4G speed in Sector 56, Gurgaon",
+    "status": "In Progress",
+    "created_at": "2024-08-27T11:20:00Z",
+    "resolution": "",
+    "customer_impact": "Multiple users in the area report <1 Mbps speeds during peak hours.",
+    "notes": "NOC team monitoring BTS ID 89A-45. Suspected backhaul congestion. Capacity upgrade request raised."
+  },
+  {
+    "id": "EUC-23420",
+    "title": "VoWiFi call drops on iPhone 14 devices",
+    "status": "Resolved",
+    "created_at": "2024-08-28T09:00:00Z",
+    "resolution": "Apple released iOS 17.1 patch fixing IMS registration issue. Customers advised to update devices.",
+    "customer_impact": "VoWiFi sessions dropping after 2–3 mins only on iPhone 14 series.",
+    "notes": "Issue not reproducible on Android. Worked with OEM to confirm bug in iOS."
+  },
+  {
+    "id": "EUC-23421",
+    "title": "Customer unable to activate eSIM",
+    "status": "Resolved",
+    "created_at": "2024-08-28T12:30:00Z",
+    "resolution": "Re-provisioned eSIM profile from backend. Customer successfully activated on retry.",
+    "customer_impact": "Single customer reported activation failure on QR scan.",
+    "notes": "Found profile corruption during initial provisioning. Fixed after deleting and reissuing."
+  },
+  {
+    "id": "EUC-23422",
+    "title": "Frequent spam calls reported on DND-activated number",
+    "status": "Open",
+    "created_at": "2024-08-29T07:50:00Z",
+    "resolution": "",
+    "customer_impact": "Customer receiving 8–10 unsolicited calls daily despite DND enabled.",
+    "notes": "Escalated to TRAI compliance desk. Need to trace originating telemarketers."
+  },
+  {
+    "id": "EUC-23423",
+    "title": "Fiber installation delayed beyond SLA",
+    "status": "In Progress",
+    "created_at": "2024-08-29T13:15:00Z",
+    "resolution": "",
+    "customer_impact": "New customer waiting >10 days for Fiber 300 plan installation.",
+    "notes": "Local field team facing shortage of drop cables. Expected resolution within 72 hours."
+  },
+  {
+    "id": "EUC-23424",
+    "title": "Recharge amount deducted but pack not activated",
+    "status": "Resolved",
+    "created_at": "2024-08-30T08:10:00Z",
+    "resolution": "Recharged ₹399 pack manually and refunded duplicate deduction within 48 hours.",
+    "customer_impact": "Customer unable to use data despite payment confirmation.",
+    "notes": "UPI gateway showed success but backend missed callback. One-off sync issue."
+  },
+  {
+    "id": "EUC-23425",
+    "title": "Intermittent latency spikes on FTTH customers in Bangalore",
+    "status": "In Progress",
+    "created_at": "2024-08-30T10:30:00Z",
+    "resolution": "",
+    "customer_impact": "High ping (>250ms) reported during online gaming hours.",
+    "notes": "Preliminary analysis shows packet loss on upstream provider link. Vendor engaged."
+  },
+  {
+    "id": "EUC-23426",
+    "title": "Caller tunes service not getting deactivated",
+    "status": "Resolved",
+    "created_at": "2024-08-31T09:45:00Z",
+    "resolution": "Manually deactivated caller tune service and reversed charges.",
+    "customer_impact": "Customer charged ₹30 monthly despite SMS confirmation of deactivation.",
+    "notes": "Found inconsistency in CRM record update. Engineering patch deployed."
+  },
+  {
+    "id": "EUC-23427",
+    "title": "5G handset not latching onto Airtel 5G Plus",
+    "status": "Open",
+    "created_at": "2024-09-01T14:25:00Z",
+    "resolution": "",
+    "customer_impact": "Customer with OnePlus 11 unable to use 5G network in Hyderabad coverage zone.",
+    "notes": "Possible device whitelisting issue. OEM support ticket raised."
+  },
+  {
+    "id": "EUC-23428",
+    "title": "Corporate VPN drops on Airtel broadband",
+    "status": "In Progress",
+    "created_at": "2024-09-02T11:00:00Z",
+    "resolution": "",
+    "customer_impact": "Multiple corporate users unable to maintain stable VPN tunnels.",
+    "notes": "Firewall policy update suspected. Waiting for customer IT team logs."
+  },
+  {
+    "id": "EUC-23429",
+    "title": "Landline number not working after migration to fiber",
+    "status": "Resolved",
+    "created_at": "2024-09-03T08:00:00Z",
+    "resolution": "Re-mapped SIP account to correct GPON port. Landline working.",
+    "customer_impact": "Customer unable to make or receive calls post migration.",
+    "notes": "Issue due to incorrect backend provisioning."
+  },
+  {
+    "id": "EUC-23430",
+    "title": "Recharge cashback not credited",
+    "status": "Open",
+    "created_at": "2024-09-04T10:50:00Z",
+    "resolution": "",
+    "customer_impact": "Customer recharged via Airtel Thanks app but cashback not reflected.",
+    "notes": "Escalated to wallet team. Waiting for reconciliation."
+  },
+  {
+    "id": "EUC-23431",
+    "title": "SMS delivery delay during peak hours",
+    "status": "In Progress",
+    "created_at": "2024-09-05T18:20:00Z",
+    "resolution": "",
+    "customer_impact": "Customers report OTP SMS delays up to 10 minutes in metro areas.",
+    "notes": "Traffic congestion on SMSC routes. Additional capacity planned."
+  }
+]

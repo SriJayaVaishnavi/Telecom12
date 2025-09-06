@@ -6,13 +6,16 @@ const fs = require("fs");
 const path = require("path");
 const { createServer } = require("http");
 const { WebSocketServer } = require("ws");
-const { spawn, exec } = require("child_process");
+const { spawn } = require("child_process");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// CORS - Allow requests from React frontend on port 3001
-const corsOptions = { origin: "http://localhost:3001", credentials: true };
+// CORS - Allow requests from any origin during development
+const corsOptions = { 
+  origin: true, // Allow any origin
+  credentials: true 
+};
 app.use(cors(corsOptions));
 app.use(express.json());
 
@@ -37,22 +40,22 @@ const CLIENT_DATA_DIR = path.join(CLIENT_DIR, 'src', 'data');
   }
 });
 
-// Serve static files from the client's public directory
+// Copy gemini_response.wav to server/src/data if it exists
+const sourceGemini = path.join(CLIENT_PUBLIC_DIR, 'audio', 'gemini_response.wav');
+const targetGemini = path.join(SERVER_DATA_DIR, 'gemini_response.wav');
+if (fs.existsSync(sourceGemini) && !fs.existsSync(targetGemini)) {
+  fs.copyFileSync(sourceGemini, targetGemini);
+  console.log(`✅ Copied gemini_response.wav to ${targetGemini}`);
+}
+
+// Serve static files
 app.use("/audio", cors(corsOptions), express.static(SERVER_DATA_DIR));
 app.use("/audio", cors(corsOptions), express.static(CLIENT_AUDIO_DIR));
 app.use("/data", cors(corsOptions), express.static(CLIENT_DATA_DIR));
 
-// Paths to JSON files (in the client's src/data)
+// Paths to JSON files
 const transcriptPath = path.join(CLIENT_DATA_DIR, "transcript.json");
 const ticketPath = path.join(CLIENT_DATA_DIR, "ticket.json");
-
-// === Helper: Mock TTS Function ===
-function createMockAudioFile(text, filePath) {
-  const content = `<!-- Mock TTS for: ${text} -->`;
-  fs.writeFileSync(filePath, content);
-  console.log(`Created mock audio file: ${filePath}`);
-  return filePath;
-}
 
 // === Helper: Load/Save Transcript ===
 function loadTranscript() {
@@ -109,31 +112,51 @@ function runWhisper() {
   });
 }
 
-// ✅ API: /api/agent-suggestions
-app.get("/api/agent-suggestions", async (req, res) => {
+// ✅ API: /api/agent-suggestions (POST with real ticket matching)
+app.post("/api/agent-suggestions", async (req, res) => {
   try {
-    if (!fs.existsSync(transcriptPath)) throw new Error(`transcript.json not found`);
-    if (!fs.existsSync(ticketPath)) throw new Error(`ticket.json not found`);
+    const { transcript } = req.body;
 
-    const transcript = JSON.parse(fs.readFileSync(transcriptPath, "utf-8"));
-    const ticket = JSON.parse(fs.readFileSync(ticketPath, "utf-8"));
+    if (!transcript || !Array.isArray(transcript)) {
+      return res.status(400).json({ error: "Valid transcript is required" });
+    }
+
+    // Load ticket.json (array of tickets)
+    if (!fs.existsSync(ticketPath)) {
+      return res.status(500).json({ error: "ticket.json not found" });
+    }
+
+    const allTickets = JSON.parse(fs.readFileSync(ticketPath, "utf-8"));
+    if (!Array.isArray(allTickets) || allTickets.length === 0) {
+      return res.status(500).json({ error: "No tickets available" });
+    }
+
+    // 🔍 Find the current ticket (e.g., first "Open" or "In Progress")
+    const currentTicket = allTickets.find(t => 
+      t.status === "Open" || t.status === "In Progress"
+    ) || allTickets[0]; // fallback to first
+
+    const { id, title, status, customer_impact, notes } = currentTicket;
 
     const prompt = `
 You are an AI assistant for a telecom support agent.
-Based on the conversation and ticket, provide exactly 3 short, actionable suggestions.
+Based on the conversation and the current ticket, provide exactly 3 short, actionable suggestions.
 
 ### Recent Transcript:
 ${transcript.slice(-6).map(msg => `${msg.speaker}: ${msg.text}`).join("\n")}
 
-### Ticket Info:
-- Issue: ${ticket.issue}
-- Priority: ${ticket.priority}
-- Device: ${ticket.deviceModel}
+### Current Ticket:
+- ID: ${id}
+- Title: ${title}
+- Status: ${status}
+- Customer Impact: ${customer_impact}
+- Notes: ${notes}
 
 ### Rules:
 - Respond ONLY with raw JSON.
 - No markdown, no explanations.
 - Keep suggestions under 10 words each.
+- Be concise and action-oriented.
 
 ### Format:
 {"suggestions": ["Suggestion 1", "Suggestion 2", "Suggestion 3"]}
@@ -170,7 +193,7 @@ ${transcript.slice(-6).map(msg => `${msg.speaker}: ${msg.text}`).join("\n")}
     console.error("Error in /api/agent-suggestions:", err.message);
     res.status(500).json({
       suggestions: [
-        "Ask if the issue started after the update",
+        "Ask if the issue started after the firmware update",
         "Run a line diagnostic test",
         "Check firmware version"
       ]
@@ -266,8 +289,9 @@ app.get('/api/ensure-agent-intro', async (req, res) => {
       return res.json({ ok: true, file: '/audio/agent_intro.wav' });
     }
 
-    // Use mock TTS
-    createMockAudioFile(introText, outPath);
+    const content = `<!-- Mock TTS for: ${introText} -->`;
+    fs.writeFileSync(outPath, content);
+    console.log(`Created mock audio file: ${outPath}`);
 
     const transcript = loadTranscript();
     transcript.push({ speaker: 'Agent', text: introText });
@@ -280,7 +304,7 @@ app.get('/api/ensure-agent-intro', async (req, res) => {
   }
 });
 
-// ✅ NEW FLOW: Ensure Caller Transcript (from caller_full.wav ONLY)
+// ✅ NEW FLOW: Ensure Caller Transcript
 app.get("/api/ensure-caller-transcript", async (req, res) => {
   try {
     const transcript = loadTranscript();
@@ -301,65 +325,102 @@ app.get("/api/ensure-caller-transcript", async (req, res) => {
   }
 });
 
-// ✅ NEW FLOW: Ensure Gemini Response
+// ✅ Ensure Gemini Response (only serve file, no text injection)
 app.get("/api/ensure-gemini-response", async (req, res) => {
   try {
-    const replyText = "I'm transferring your case to a human representative now to ensure the quickest resolution. Please stay on the line while I connect you.";
     const outPath = path.join(CLIENT_AUDIO_DIR, 'gemini_response.wav');
-
-    if (fs.existsSync(outPath) && fs.statSync(outPath).size > 44) {
+    if (fs.existsSync(outPath)) {
       return res.json({ ok: true, file: '/audio/gemini_response.wav' });
     }
-
-    // Use mock TTS
-    createMockAudioFile(replyText, outPath);
-
-    const transcript = loadTranscript();
-    transcript.push({ speaker: "Agent", text: replyText });
-    saveTranscript(transcript);
-
-    res.json({ ok: true, file: '/audio/gemini_response.wav' });
+    res.status(404).json({ ok: false, error: 'gemini_response.wav not found' });
   } catch (err) {
     console.error("Gemini response failed:", err);
     res.status(500).json({ ok: false, error: err.message });
   }
 });
 
-// ✅ NEW: /api/playback-complete (Handles notifications from CallAudioPlayer)
+// ✅ NEW: Trigger transcription of gemini_response.wav
+app.post('/api/transcribe-agent-response', (req, res) => {
+  const GEMINI_FILE = path.join(SERVER_DATA_DIR, 'gemini_response.wav');
+  const pyScript = path.join(SERVER_DIR, 'transcribe_audio.py');
+
+  if (!fs.existsSync(GEMINI_FILE)) {
+    console.warn('⚠️ gemini_response.wav not found for transcription');
+    return res.json({ ok: true });
+  }
+
+  console.log('🎤 Starting transcription of gemini_response.wav...');
+  const python = spawn('python', [pyScript, GEMINI_FILE]);
+  let buffer = '';
+
+  python.stdout.on('data', (data) => {
+    buffer += data.toString();
+    const lines = buffer.split('\n');
+    buffer = lines.pop();
+
+    lines.forEach(line => {
+      if (!line.trim()) return;
+      try {
+        const msg = JSON.parse(line);
+        if (msg.speaker && msg.text) {
+          const text = msg.text.trim();
+          if (text && app.locals.lastWs && app.locals.lastWs.readyState === WebSocket.OPEN) {
+            app.locals.lastWs.send(JSON.stringify({
+              speaker: 'Agent',
+              text
+            }));
+            console.log(`🟢 [Agent] ${text}`);
+          }
+        }
+      } catch (e) {
+        console.error('Parse error in gemini stream:', e);
+      }
+    });
+  });
+
+  python.stderr.on('data', (d) => console.error('Gemini transcription error:', d.toString()));
+  python.on('close', () => console.log('✅ gemini_response.wav transcription complete'));
+
+  res.json({ ok: true });
+});
+
+// ✅ /api/playback-complete
 app.post('/api/playback-complete', async (req, res) => {
   try {
     const { file } = req.body || {};
-    if (!file) {
-      console.warn('[API] /api/playback-complete called without "file" in body');
-      return res.status(400).json({ ok: false, error: 'file is required in request body' });
-    }
-    
-    if (app.locals.lastNotifiedFile === file) {
-      console.log(`[API] /api/playback-complete: Ignoring duplicate notification for ${file}`);
-      return res.json({ ok: true });
-    }
+    if (!file) return res.status(400).json({ ok: false, error: 'file required' });
+    if (app.locals.lastNotifiedFile === file) return res.json({ ok: true });
     app.locals.lastNotifiedFile = file;
 
-    console.log(`[API] /api/playback-complete received for file: ${file}`);
+    console.log(`[API] Playback complete: ${file}`);
+
+    // When caller finishes, trigger AI response
+    if (file === 'caller_full.wav') {
+      fetch('http://localhost:5000/api/generate-agent-response', {
+        method: 'POST'
+      }).catch(console.error);
+    }
+
+    // When gemini_response.wav finishes, transcribe it
+    if (file === 'gemini_response.wav') {
+      fetch('http://localhost:5000/api/transcribe-agent-response', {
+        method: 'POST'
+      }).catch(console.error);
+    }
+
     res.json({ ok: true });
   } catch (e) {
-    console.error('Playback complete error:', e);
     res.status(500).json({ ok: false, error: e.message });
   }
 });
 
-// ✅ NEW: /api/save-transcript - Saves the transcript from the frontend
+// ✅ /api/save-transcript
 app.post('/api/save-transcript', async (req, res) => {
   try {
     const transcript = req.body;
-    if (!Array.isArray(transcript)) {
-      return res.status(400).json({ error: 'Transcript must be an array' });
-    }
-
-    // Save the transcript to the file
+    if (!Array.isArray(transcript)) return res.status(400).json({ error: 'Array required' });
     fs.writeFileSync(transcriptPath, JSON.stringify(transcript, null, 2));
-    console.log(`✅ Transcript saved to ${transcriptPath}. Length: ${transcript.length}`);
-
+    console.log(`✅ Transcript saved. Length: ${transcript.length}`);
     res.json({ ok: true });
   } catch (err) {
     console.error('❌ Failed to save transcript:', err);
@@ -367,121 +428,78 @@ app.post('/api/save-transcript', async (req, res) => {
   }
 });
 
-// ✅ REAL-TIME TRANSCRIPTION WebSocket (For live transcript)
+// ✅ REAL-TIME TRANSCRIPTION WebSocket
 wss.on('connection', (ws, req) => {
-  console.log('🟢 New WebSocket connection established for real-time transcription');
+  console.log('🟢 New WebSocket connection established');
 
-  // Close previous connection
   if (app.locals.lastWs && app.locals.lastWs.readyState === WebSocket.OPEN) {
-    console.log('🔴 Closing previous WebSocket');
     app.locals.lastWs.close();
   }
   app.locals.lastWs = ws;
 
-  // === PER-CONNECTION STATE ===
-  const conversation = [];
-  // ✅ Use caller_full.wav instead of caller_1/2/3.wav
-  const fullPaths = [path.join(SERVER_DATA_DIR, 'caller_full.wav')];
   const seenTexts = new Set();
-  const repliedFiles = new Set();
   let hasSentIntro = false;
 
-  // ✅ Send agent intro
+  const CALLER_FILE = path.join(SERVER_DATA_DIR, 'caller_full.wav');
+  const pyScript = path.join(SERVER_DIR, 'transcribe_audio.py');
+
+  if (!fs.existsSync(pyScript)) {
+    ws.send(JSON.stringify({ error: `Python script not found: ${pyScript}` }));
+    return ws.close();
+  }
+
+  // ✅ Send intro
   if (!hasSentIntro) {
-    const introMsg = {
+    ws.send(JSON.stringify({
       speaker: 'Agent',
       text: 'Thank you for calling technical support. My name is Jennifer Miller. To get started, could you please provide your date of birth and ZIP code for verification?'
-    };
-    ws.send(JSON.stringify(introMsg));
-    conversation.push(introMsg);
+    }));
     hasSentIntro = true;
   }
 
-  // Python script for transcription
-  const pyScript = path.join(SERVER_DIR, 'transcribe_audio.py');
-  if (!fs.existsSync(pyScript)) {
-    ws.send(JSON.stringify({ error: `Python script not found: ${pyScript}`, type: 'system' }));
-    ws.close();
-    return;
-  }
-
-  let python;
-  try {
-    console.log(`[Python] Starting transcription process for file:`, fullPaths[0]);
-    python = spawn('python', [pyScript, ...fullPaths]);
-  } catch (err) {
-    ws.send(JSON.stringify({ error: `Failed to start Python: ${err.message}`, type: 'system' }));
-    ws.close();
-    return;
-  }
-
-  // Keep alive
+  // Ping
   const pingInterval = setInterval(() => {
     if (ws.readyState === WebSocket.OPEN) ws.ping();
   }, 30000);
   ws.on('pong', () => console.log('🏓 Pong received'));
-  ws.on('close', () => {
-    clearInterval(pingInterval);
-    console.log('WebSocket closed');
-  });
+  ws.on('close', () => clearInterval(pingInterval));
 
-  // Buffer for parsing
+  // === Transcribe caller_full.wav only ===
+  if (!fs.existsSync(CALLER_FILE)) {
+    ws.send(JSON.stringify({ error: `caller_full.wav not found` }));
+    return ws.close();
+  }
+
+  const python = spawn('python', [pyScript, CALLER_FILE]);
   let buffer = '';
+
   python.stdout.on('data', (data) => {
     buffer += data.toString();
-    let index;
-    while ((index = buffer.indexOf('\n')) >= 0) {
-      const line = buffer.slice(0, index).trim();
-      buffer = buffer.slice(index + 1);
-      if (!line) continue;
+    const lines = buffer.split('\n');
+    buffer = lines.pop();
 
-      let msg;
+    lines.forEach(line => {
+      if (!line.trim()) return;
       try {
-        msg = JSON.parse(line);
-      } catch (err) {
-        console.error('Parse error:', err, line);
-        continue;
-      }
-
-      if (msg.error) {
-        console.warn('Python error:', msg);
-        continue;
-      }
-
-      // ✅ Stream caller transcription
-      if (msg.speaker === "caller" && msg.text) {
-        const fileBase = path.basename(msg.file);
-        // ✅ Check for caller_full.wav
-        if (fileBase !== 'caller_full.wav') continue;
-
-        const text = msg.text.trim();
-        if (!text) continue;
-
-        if (seenTexts.has(text)) {
-          console.log(`🟨 Duplicate text skipped: ${text}`);
-          continue;
+        const msg = JSON.parse(line);
+        if (msg.speaker && msg.text) {
+          const text = msg.text.trim();
+          if (text && !seenTexts.has(text)) {
+            seenTexts.add(text);
+            ws.send(JSON.stringify({ speaker: "Customer", text }));
+          }
         }
-        seenTexts.add(text);
-
-        const turn = { speaker: "Customer", text };
-        ws.send(JSON.stringify(turn));
+      } catch (e) {
+        console.error('Parse error (caller):', e);
       }
-    }
+    });
   });
 
-  python.stderr.on('data', (data) => console.error(`Python stderr: ${data}`));
-
-  python.on('close', (code) => {
-    console.log('✅ Python process closed:', code);
-    setTimeout(() => ws.close(), 1500);
-  });
-
-  // Store per-connection state
-  ws.conversation = conversation;
-  ws.repliedFiles = repliedFiles;
+  python.stderr.on('data', (d) => console.error('Py err:', d.toString()));
+  python.on('close', () => console.log('✅ caller_full.wav transcription done'));
 });
 
-// ✅ NEW: Generate AI Agent Response based on full transcript
+// ✅ NEW: Generate AI Agent Response (only triggers audio, no text injection)
 app.post("/api/generate-agent-response", async (req, res) => {
   try {
     const transcript = loadTranscript();
@@ -511,7 +529,6 @@ Based on the customer's message and full conversation, generate a concise, empat
 ${transcript.map(msg => `${msg.speaker}: ${msg.text}`).join("\n")}
 `;
 
-    // 🔧 FIX: Removed extra space in URL
     const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${process.env.GEMINI_API_KEY}`;
 
     const geminiRes = await fetch(GEMINI_URL, {
@@ -538,39 +555,16 @@ ${transcript.map(msg => `${msg.speaker}: ${msg.text}`).join("\n")}
     const parsed = JSON.parse(cleanedText);
     const aiResponse = parsed.response;
 
-    // ✅ Save to transcript
-    transcript.push({ speaker: "Agent", text: aiResponse });
-    saveTranscript(transcript);
+    // ✅ Do NOT save to transcript or send via WebSocket
+    // ✅ Real transcription will come from gemini_response.wav audio
 
-    // ✅ Respond to client
     res.json({ ok: true, response: aiResponse });
-
-    // ✅ Send over WebSocket (CRITICAL)
-    const ws = app.locals.lastWs;
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ speaker: "Agent", text: aiResponse }), (err) => {
-        if (err) console.error("WebSocket send error:", err);
-        else console.log("🟢 AI message sent via WebSocket:", aiResponse);
-      });
-    } else {
-      console.warn("🟡 WebSocket not open. Cannot send AI message.");
-    }
-
   } catch (err) {
     console.error("AI response generation failed:", err);
-    res.status(500).json({ ok: false, error: err.message });
-
-    const fallback = "I'm looking into that for you now.";
-    const transcript = loadTranscript();
-    transcript.push({ speaker: "Agent", text: fallback });
-    saveTranscript(transcript);
-
-    const ws = app.locals.lastWs;
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ speaker: "Agent", text: fallback }));
-    }
+    res.json({ ok: true, response: "I'm looking into that for you now." });
   }
 });
+
 // ✅ Start server
 server.listen(PORT, () => {
   console.log(`✅ Backend server running on http://localhost:${PORT}`);
