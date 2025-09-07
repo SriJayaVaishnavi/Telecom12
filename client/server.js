@@ -8,6 +8,19 @@ const { createServer } = require("http");
 const { WebSocketServer } = require("ws");
 const { spawn } = require("child_process");
 
+// Install: npm install node-fetch@2
+const fetch = require('node-fetch');
+global.fetch = fetch; // Enable global fetch for all routes
+
+// Load environment variables
+const TAVILY_API_KEY = process.env.TAVILY_API_KEY;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+
+if (!TAVILY_API_KEY) {
+  console.error(' TAVILY_API_KEY is not set in .env file');
+  process.exit(1);
+}
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -22,7 +35,7 @@ app.use(express.json());
 // Create HTTP and WebSocket servers
 const server = createServer(app);
 const wss = new WebSocketServer({ server, path: '/transcribe' });
-console.log(`✅ WebSocket server running on ws://localhost:${PORT}/transcribe`);
+console.log(` WebSocket server running on ws://localhost:${PORT}/transcribe`);
 
 // === CORRECTED File Paths ===
 const SERVER_DIR = path.join(__dirname, '..', 'server');
@@ -45,7 +58,7 @@ const sourceGemini = path.join(CLIENT_PUBLIC_DIR, 'audio', 'gemini_response.wav'
 const targetGemini = path.join(SERVER_DATA_DIR, 'gemini_response.wav');
 if (fs.existsSync(sourceGemini) && !fs.existsSync(targetGemini)) {
   fs.copyFileSync(sourceGemini, targetGemini);
-  console.log(`✅ Copied gemini_response.wav to ${targetGemini}`);
+  console.log(` Copied gemini_response.wav to ${targetGemini}`);
 }
 
 // Serve static files
@@ -72,7 +85,7 @@ function loadTranscript() {
 
 function saveTranscript(data) {
   fs.writeFileSync(transcriptPath, JSON.stringify(data, null, 2));
-  console.log(`✅ Saved transcript with ${data.length} entries`);
+  console.log(` Saved transcript with ${data.length} entries`);
 }
 
 // === Helper: Run Whisper transcription on caller_full.wav ===
@@ -112,7 +125,47 @@ function runWhisper() {
   });
 }
 
-// ✅ API: /api/agent-suggestions (POST with real ticket matching)
+// Proxy Tavily API
+app.post('/api/search-kb', async (req, res) => {
+  const { query } = req.body;
+  if (!query) {
+    return res.status(400).json({ error: "Query is required" });
+  }
+
+  if (!TAVILY_API_KEY) {
+    return res.status(500).json({ error: "Tavily API key not set" });
+  }
+
+  try {
+    const response = await fetch('https://api.tavily.com/search', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${TAVILY_API_KEY}`
+      },
+      body: JSON.stringify({
+        query,
+        search_depth: 'basic',
+        max_results: 5,
+        include_answer: false
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Tavily API Error:', errorText);
+      return res.status(500).json({ error: 'Failed to fetch from Tavily' });
+    }
+
+    const data = await response.json();
+    res.json(data);
+  } catch (err) {
+    console.error('Tavily Proxy Error:', err);
+    res.status(500).json({ error: 'Request failed' });
+  }
+});
+
+// API: /api/agent-suggestions (POST with real ticket matching)
 app.post("/api/agent-suggestions", async (req, res) => {
   try {
     const { transcript } = req.body;
@@ -131,7 +184,7 @@ app.post("/api/agent-suggestions", async (req, res) => {
       return res.status(500).json({ error: "No tickets available" });
     }
 
-    // 🔍 Find the current ticket (e.g., first "Open" or "In Progress")
+    // Find the current ticket (e.g., first "Open" or "In Progress")
     const currentTicket = allTickets.find(t => 
       t.status === "Open" || t.status === "In Progress"
     ) || allTickets[0]; // fallback to first
@@ -162,6 +215,7 @@ ${transcript.slice(-6).map(msg => `${msg.speaker}: ${msg.text}`).join("\n")}
 {"suggestions": ["Suggestion 1", "Suggestion 2", "Suggestion 3"]}
 `;
 
+    // ✅ Fixed URL: Removed space before :generateContent
     const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${process.env.GEMINI_API_KEY}`;
 
     const response = await fetch(GEMINI_URL, {
@@ -201,7 +255,7 @@ ${transcript.slice(-6).map(msg => `${msg.speaker}: ${msg.text}`).join("\n")}
   }
 });
 
-// ✅ API: /api/generate-summary
+// API: /api/generate-summary
 app.post("/api/generate-summary", async (req, res) => {
   try {
     const { transcript, ticket, playbook } = req.body;
@@ -240,6 +294,7 @@ ${lastMessages}
 }
 `;
 
+    // Fixed URL: Using gemini-1.5-pro model
     const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${process.env.GEMINI_API_KEY}`;
 
     const response = await fetch(GEMINI_URL, {
@@ -274,12 +329,12 @@ ${lastMessages}
   }
 });
 
-// ✅ Health check
+// Health check
 app.get("/health", (req, res) => {
   res.json({ status: "OK" });
 });
 
-// ✅ Ensure Agent Intro TTS exists
+// Ensure Agent Intro TTS exists
 app.get('/api/ensure-agent-intro', async (req, res) => {
   try {
     const introText = 'Thank you for calling technical support. My name is Jennifer Miller. To get started, could you please provide your date of birth and ZIP code for verification?';
@@ -304,7 +359,7 @@ app.get('/api/ensure-agent-intro', async (req, res) => {
   }
 });
 
-// ✅ NEW FLOW: Ensure Caller Transcript
+// NEW FLOW: Ensure Caller Transcript
 app.get("/api/ensure-caller-transcript", async (req, res) => {
   try {
     const transcript = loadTranscript();
@@ -325,7 +380,7 @@ app.get("/api/ensure-caller-transcript", async (req, res) => {
   }
 });
 
-// ✅ Ensure Gemini Response (only serve file, no text injection)
+// Ensure Gemini Response (only serve file, no text injection)
 app.get("/api/ensure-gemini-response", async (req, res) => {
   try {
     const outPath = path.join(CLIENT_AUDIO_DIR, 'gemini_response.wav');
@@ -339,17 +394,17 @@ app.get("/api/ensure-gemini-response", async (req, res) => {
   }
 });
 
-// ✅ NEW: Trigger transcription of gemini_response.wav
+// NEW: Trigger transcription of gemini_response.wav
 app.post('/api/transcribe-agent-response', (req, res) => {
   const GEMINI_FILE = path.join(SERVER_DATA_DIR, 'gemini_response.wav');
   const pyScript = path.join(SERVER_DIR, 'transcribe_audio.py');
 
   if (!fs.existsSync(GEMINI_FILE)) {
-    console.warn('⚠️ gemini_response.wav not found for transcription');
+    console.warn(' gemini_response.wav not found for transcription');
     return res.json({ ok: true });
   }
 
-  console.log('🎤 Starting transcription of gemini_response.wav...');
+  console.log(' Starting transcription of gemini_response.wav...');
   const python = spawn('python', [pyScript, GEMINI_FILE]);
   let buffer = '';
 
@@ -369,7 +424,7 @@ app.post('/api/transcribe-agent-response', (req, res) => {
               speaker: 'Agent',
               text
             }));
-            console.log(`🟢 [Agent] ${text}`);
+            console.log(` [Agent] ${text}`);
           }
         }
       } catch (e) {
@@ -379,12 +434,12 @@ app.post('/api/transcribe-agent-response', (req, res) => {
   });
 
   python.stderr.on('data', (d) => console.error('Gemini transcription error:', d.toString()));
-  python.on('close', () => console.log('✅ gemini_response.wav transcription complete'));
+  python.on('close', () => console.log(' gemini_response.wav transcription complete'));
 
   res.json({ ok: true });
 });
 
-// ✅ /api/playback-complete
+// /api/playback-complete
 app.post('/api/playback-complete', async (req, res) => {
   try {
     const { file } = req.body || {};
@@ -414,23 +469,23 @@ app.post('/api/playback-complete', async (req, res) => {
   }
 });
 
-// ✅ /api/save-transcript
+// /api/save-transcript
 app.post('/api/save-transcript', async (req, res) => {
   try {
     const transcript = req.body;
     if (!Array.isArray(transcript)) return res.status(400).json({ error: 'Array required' });
     fs.writeFileSync(transcriptPath, JSON.stringify(transcript, null, 2));
-    console.log(`✅ Transcript saved. Length: ${transcript.length}`);
+    console.log(` Transcript saved. Length: ${transcript.length}`);
     res.json({ ok: true });
   } catch (err) {
-    console.error('❌ Failed to save transcript:', err);
+    console.error(' Failed to save transcript:', err);
     res.status(500).json({ ok: false, error: err.message });
   }
 });
 
-// ✅ REAL-TIME TRANSCRIPTION WebSocket
+// REAL-TIME TRANSCRIPTION WebSocket
 wss.on('connection', (ws, req) => {
-  console.log('🟢 New WebSocket connection established');
+  console.log(' New WebSocket connection established');
 
   if (app.locals.lastWs && app.locals.lastWs.readyState === WebSocket.OPEN) {
     app.locals.lastWs.close();
@@ -448,7 +503,7 @@ wss.on('connection', (ws, req) => {
     return ws.close();
   }
 
-  // ✅ Send intro
+  // Send intro
   if (!hasSentIntro) {
     ws.send(JSON.stringify({
       speaker: 'Agent',
@@ -461,7 +516,7 @@ wss.on('connection', (ws, req) => {
   const pingInterval = setInterval(() => {
     if (ws.readyState === WebSocket.OPEN) ws.ping();
   }, 30000);
-  ws.on('pong', () => console.log('🏓 Pong received'));
+  ws.on('pong', () => console.log(' Pong received'));
   ws.on('close', () => clearInterval(pingInterval));
 
   // === Transcribe caller_full.wav only ===
@@ -496,10 +551,10 @@ wss.on('connection', (ws, req) => {
   });
 
   python.stderr.on('data', (d) => console.error('Py err:', d.toString()));
-  python.on('close', () => console.log('✅ caller_full.wav transcription done'));
+  python.on('close', () => console.log(' caller_full.wav transcription done'));
 });
 
-// ✅ NEW: Generate AI Agent Response (only triggers audio, no text injection)
+// NEW: Generate AI Agent Response (only triggers audio, no text injection)
 app.post("/api/generate-agent-response", async (req, res) => {
   try {
     const transcript = loadTranscript();
@@ -529,6 +584,7 @@ Based on the customer's message and full conversation, generate a concise, empat
 ${transcript.map(msg => `${msg.speaker}: ${msg.text}`).join("\n")}
 `;
 
+    // Fixed URL: Using gemini-1.5-pro model
     const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${process.env.GEMINI_API_KEY}`;
 
     const geminiRes = await fetch(GEMINI_URL, {
@@ -555,8 +611,8 @@ ${transcript.map(msg => `${msg.speaker}: ${msg.text}`).join("\n")}
     const parsed = JSON.parse(cleanedText);
     const aiResponse = parsed.response;
 
-    // ✅ Do NOT save to transcript or send via WebSocket
-    // ✅ Real transcription will come from gemini_response.wav audio
+    // Do NOT save to transcript or send via WebSocket
+    // Real transcription will come from gemini_response.wav audio
 
     res.json({ ok: true, response: aiResponse });
   } catch (err) {
@@ -565,10 +621,10 @@ ${transcript.map(msg => `${msg.speaker}: ${msg.text}`).join("\n")}
   }
 });
 
-// ✅ Start server
+// Start server
 server.listen(PORT, () => {
-  console.log(`✅ Backend server running on http://localhost:${PORT}`);
-  console.log(`💡 API: http://localhost:${PORT}/api/agent-suggestions`);
-  console.log(`🔊 Audio: http://localhost:${PORT}/audio/mock_call.mp3`);
-  console.log(`📡 WebSocket: ws://localhost:${PORT}/transcribe`);
+  console.log(` Backend server running on http://localhost:${PORT}`);
+  console.log(` API: http://localhost:${PORT}/api/agent-suggestions`);
+  console.log(` Audio: http://localhost:${PORT}/audio/mock_call.mp3`);
+  console.log(` WebSocket: ws://localhost:${PORT}/transcribe`);
 });

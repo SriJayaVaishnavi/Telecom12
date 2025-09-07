@@ -1,36 +1,46 @@
-
 // src/components/AgentDesktop.js
 import React, { useState, useEffect, useRef } from 'react';
 
-import HeaderBar from './HeaderBar';
 import CRMPanel from './CRMPanel';
 import TranscriptPane from './TranscriptPane';
 import IntentChips from './IntentChips';
-import Suggestions from './Suggestions';
 import NotesWrapUp from './NotesWrapUp';
 
 // Mock data — ✅ Ensure these files exist
 import crmData from '../data/crm.json';
 import initialStepsData from '../data/steps.json';
 import smsData from '../data/sms.json';
-import ticketData from '../data/ticket.json'; // Must exist
+import ticketData from '../data/ticket.json'; // Array of tickets
 
 const AgentDesktop = () => {
   const [transcript, setTranscript] = useState([]);
-  const [suggestions, setSuggestions] = useState(["Analyzing..."]);
+  const [suggestions, setSuggestions] = useState([]);
   const [wrapUp, setWrapUp] = useState({ summary: '', disposition: '', notes: '' });
   const [smsSent, setSmsSent] = useState(false);
-  const messageCountRef = useRef(0); // Track number of messages processed
+  const [callDuration, setCallDuration] = useState(0);
+  const [searchedTicket, setSearchedTicket] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [kbResults, setKbResults] = useState([]);
+  const messageCountRef = useRef(0);
 
   // Refs for WebSocket
   const wsRef = useRef(null);
+  const intervalRef = useRef(null);
 
-  // Fetch suggestions when transcript changes
+  // Start call timer
   useEffect(() => {
-    if (transcript.length > 0) {
-      fetchSuggestions(transcript);
-    }
-  }, [transcript]);
+    intervalRef.current = setInterval(() => {
+      setCallDuration(prev => prev + 1);
+    }, 1000);
+    return () => clearInterval(intervalRef.current);
+  }, []);
+
+  // Format duration as MM:SS
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
+    const secs = (seconds % 60).toString().padStart(2, '0');
+    return `${mins}:${secs}`;
+  };
 
   // ✅ Update wrap-up fields manually
   const handleUpdateWrapUp = (field, value) => {
@@ -71,9 +81,7 @@ const AgentDesktop = () => {
             return;
           }
           
-          if (message.type || !message.speaker || !message.text) {
-            return;
-          }
+          if (message.type || !message.speaker || !message.text) return;
           
           let delay;
           messageCountRef.current += 1;
@@ -81,23 +89,26 @@ const AgentDesktop = () => {
           if (message.speaker === 'Agent') {
             delay = 0;
           } else {
-            if (messageCountRef.current === 1) delay = 15000;
-            else if (messageCountRef.current === 2) delay = 17000;
-            else delay = 22000;
+            delay = messageCountRef.current === 1 ? 15000 : 
+                    messageCountRef.current === 2 ? 17000 : 22000;
           }
-          
-          console.log(`🕒 Adding ${message.speaker} message with ${delay/1000} second delay`);
           
           setTimeout(() => {
             setTranscript(prevTranscript => {
               const lastMsg = prevTranscript[prevTranscript.length - 1];
               if (lastMsg && lastMsg.speaker === message.speaker && lastMsg.text === message.text) {
-                console.log(`🟨 Ignoring duplicate message: ${message.text}`);
+                console.log(`🟨 Ignoring duplicate: ${message.text}`);
                 return prevTranscript;
               }
               
-              const newTranscript = [...prevTranscript, { ...message, timestamp: new Date().toISOString(), isFinal: false }];
-              fetchSuggestions(newTranscript);
+              const newTranscript = [...prevTranscript, {
+                ...message,
+                timestamp: new Date().toISOString(),
+                isFinal: false
+              }];
+              
+              // ✅ Removed auto-fetch — ONLY fetch on button click
+              // fetchSuggestions(newTranscript); // ❌ REMOVED
               return newTranscript;
             });
           }, delay);
@@ -123,9 +134,13 @@ const AgentDesktop = () => {
       if (wsRef.current) {
         wsRef.current.close();
       }
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
     };
   }, []);
 
+  // ✅ Save transcript
   useEffect(() => {
     if (transcript.length > 0) {
       fetch('http://localhost:5000/api/save-transcript', {
@@ -143,12 +158,16 @@ const AgentDesktop = () => {
     }
   }, [transcript]);
 
+  // ✅ Fetch AI Suggestions (Manual Trigger)
   const fetchSuggestions = async (currentTranscript = transcript) => {
     try {
       const res = await fetch('http://localhost:5000/api/agent-suggestions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transcript: currentTranscript, ticket: ticketData })
+        body: JSON.stringify({ 
+          transcript: currentTranscript, 
+          ticket: searchedTicket || ticketData 
+        })
       });
 
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -166,13 +185,21 @@ const AgentDesktop = () => {
     }
   };
 
+  // ✅ Generate Summary
   const handleGenerateSummary = () => {
     fetch('http://localhost:5000/api/generate-summary', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ transcript, ticket: ticketData })
+      body: JSON.stringify({ 
+        transcript, 
+        ticket: searchedTicket || ticketData, 
+        playbook: initialStepsData 
+      })
     })
-    .then(res => res.ok ? res.json() : Promise.reject(`HTTP ${res.status}`))
+    .then(res => {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    })
     .then(data => {
       console.log("✅ AI Summary Received:", data);
       setWrapUp(data);
@@ -187,83 +214,327 @@ const AgentDesktop = () => {
     });
   };
 
-  const handleSendSms = () => setSmsSent(true);
+  // ✅ Send SMS
+  const handleSendSms = () => {
+    setSmsSent(true);
+  };
+
+  // ✅ Search Ticket Functionality
+  const searchTicket = () => {
+    if (!transcript || transcript.length === 0) {
+      alert("No conversation to analyze.");
+      return;
+    }
+
+    const fullText = transcript.map(t => t.text).join(" ").toLowerCase();
+    const keywords = [
+      'firmware update',
+      'internet drops',
+      'link flaps',
+      'ont firmware',
+      'router update',
+      'reboot',
+      'disconnect',
+      'speed issue',
+      'latency',
+      'slow internet'
+    ];
+
+    const matchedTicket = ticketData.find(ticket => {
+      const title = ticket.title.toLowerCase();
+      const impact = ticket.customer_impact?.toLowerCase() || '';
+      const notes = ticket.notes?.toLowerCase() || '';
+
+      return keywords.some(kw => 
+        fullText.includes(kw) && 
+        (title.includes(kw) || impact.includes(kw) || notes.includes(kw))
+      );
+    });
+
+    if (matchedTicket) {
+      setSearchedTicket(matchedTicket);
+      setSearchQuery(matchedTicket.title);
+    } else {
+      alert("No matching ticket found in database.");
+    }
+  };
+
+  // ✅ Search KB using Tavily API
+  const searchKB = async () => {
+    if (!searchQuery.trim()) return;
+
+    try {
+      const res = await fetch('http://localhost:5000/api/search-kb', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: searchQuery })
+      });
+
+      if (!res.ok) throw new Error('Failed to search knowledge base.');
+      const data = await res.json();
+      setKbResults(data.results || []);
+    } catch (err) {
+      alert('Failed to search knowledge base.');
+      console.error(err);
+    }
+  };
+
+  // ✅ Auto-fill search bar when ticket changes
+  useEffect(() => {
+    if (searchedTicket) {
+      setSearchQuery(searchedTicket.title);
+    }
+  }, [searchedTicket]);
 
   return (
-    // Root container ensures the entire component uses the full screen
     <div style={{ 
       height: '100vh', 
       width: '100vw', 
       display: 'flex', 
       flexDirection: 'column', 
-      backgroundColor: '#f4f7fa' 
+      backgroundColor: '#f9fafb' 
     }}>
-      <HeaderBar agent={crmData.agent} customer={crmData.customer} />
+      {/* HeaderBar */}
+      <header style={{
+        padding: '16px 24px',
+        backgroundColor: '#ffffff',
+        borderBottom: '2px solid #4f46e5',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+      }}>
+        <div>
+          <h1 style={{
+            margin: 0,
+            fontSize: '1.5rem',
+            fontWeight: '600',
+            color: '#1f2937'
+          }}>Agent Desktop</h1>
+          <p style={{
+            margin: '4px 0 0 0',
+            fontSize: '0.875rem',
+            color: '#4b5563'
+          }}>
+            Agent: {crmData.agent.name} | Caller: {crmData.customer.name}
+          </p>
+        </div>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '24px'
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            color: '#22c55e',
+            fontWeight: '500'
+          }}>
+            <div style={{
+              width: '10px',
+              height: '10px',
+              borderRadius: '50%',
+              backgroundColor: '#22c55e',
+              animation: 'pulse 2s infinite'
+            }}></div>
+            On Call • {formatTime(callDuration)}
+          </div>
+          <div style={{
+            display: 'flex',
+            gap: '8px'
+          }}>
+            <button style={{
+              padding: '6px 12px',
+              borderRadius: '9999px',
+              border: '1px solid #e5e7eb',
+              backgroundColor: '#f3f4f6',
+              fontSize: '0.875rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}>
+              <span>🎙️</span> Mute
+            </button>
+            <button style={{
+              padding: '6px 12px',
+              borderRadius: '9999px',
+              border: '1px solid #e5e7eb',
+              backgroundColor: '#f3f4f6',
+              fontSize: '0.875rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}>
+              <span>⏸️</span> Hold
+            </button>
+            <button style={{
+              padding: '6px 12px',
+              borderRadius: '9999px',
+              backgroundColor: '#ef4444',
+              color: 'white',
+              border: 'none',
+              fontSize: '0.875rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}>
+              <span>📞</span> End Call
+            </button>
+          </div>
+        </div>
+      </header>
 
-      {/* Main Layout for the two columns */}
+      {/* Main Layout */}
       <div style={{
-        flex: 1, // Allows this container to fill the remaining vertical space
+        flex: 1,
         display: 'flex',
         gap: '16px',
         padding: '16px',
-        overflow: 'hidden' // Prevents this container from scrolling, allowing children to scroll
+        overflow: 'hidden'
       }}>
-        
-        {/* LEFT PANEL: Fixed Width */}
+        {/* LEFT PANEL */}
         <div style={{
-          flex: '0 0 340px', // Fixed width: No grow, No shrink, 340px basis
+          flex: '0 0 350px',
           display: 'flex',
           flexDirection: 'column',
           gap: '16px',
           overflowY: 'auto'
         }}>
-          {/* Card Component */}
+          {/* CRM Profile */}
           <div style={{
-            border: '1px solid #e0e0e0',
+            border: '1px solid #e5e7eb',
             borderRadius: '8px',
-            background: '#fff',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+            background: '#ffffff',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
             padding: '16px'
           }}>
+            <h4 style={{
+              margin: '0 0 12px 0',
+              fontSize: '1rem',
+              fontWeight: '600',
+              color: '#1f2937',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}>
+              <span>👤</span> Customer Profile
+            </h4>
             <CRMPanel customer={crmData.customer} />
           </div>
 
+          {/* Ticket Details */}
           <div style={{
-            border: '1px solid #e0e0e0',
+            border: '1px solid #e5e7eb',
             borderRadius: '8px',
-            background: '#fff',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+            background: '#ffffff',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
             padding: '16px'
           }}>
-            <h4 style={{ margin: '0 0 12px 0', color: '#333' }}>Ticket Details</h4>
-            <button style={{
+            <h4 style={{
+              margin: '0 0 12px 0',
+              fontSize: '1rem',
+              fontWeight: '600',
+              color: '#0f766e',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}>
+              <span>🎫</span> Ticket Details
+            </h4>
+            <button 
+              onClick={searchTicket}
+              style={{
                 padding: '10px 14px',
-                backgroundColor: '#007bff',
+                backgroundColor: '#0f766e',
                 color: 'white',
                 border: 'none',
                 borderRadius: '6px',
                 cursor: 'pointer',
                 fontSize: '14px',
-                fontWeight: '500'
-            }}>
-              Search Ticket
+                fontWeight: '500',
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <span>🔍</span> Search Ticket
             </button>
+
+            {searchedTicket && (
+              <div style={{
+                marginTop: '12px',
+                padding: '12px',
+                background: '#f0fdfa',
+                border: '1px solid #a7f3d0',
+                borderRadius: '6px',
+                fontSize: '14px'
+              }}>
+                <div style={{ marginBottom: '6px' }}>
+                  <strong>ID:</strong> {searchedTicket.id}
+                </div>
+                <div style={{ marginBottom: '6px' }}>
+                  <strong>Title:</strong> {searchedTicket.title}
+                </div>
+                <div style={{ marginBottom: '6px' }}>
+                  <strong>Status:</strong>{' '}
+                  <span style={{
+                    padding: '2px 8px',
+                    backgroundColor:
+                      searchedTicket.status === 'Resolved' ? '#d4edda' :
+                      searchedTicket.status === 'In Progress' ? '#d1ecf1' :
+                      '#fff3cd',
+                    color:
+                      searchedTicket.status === 'Resolved' ? '#155724' :
+                      searchedTicket.status === 'In Progress' ? '#0c5460' :
+                      '#856404',
+                    borderRadius: '4px',
+                    fontSize: '12px',
+                    fontWeight: '500'
+                  }}>
+                    {searchedTicket.status}
+                  </span>
+                </div>
+                <div style={{ marginBottom: '6px' }}>
+                  <strong>Impact:</strong> {searchedTicket.customer_impact}
+                </div>
+                <div>
+                  <strong>Notes:</strong> {searchedTicket.notes}
+                </div>
+              </div>
+            )}
           </div>
 
+          {/* Knowledge Base */}
           <div style={{
-            border: '1px solid #e0e0e0',
+            border: '1px solid #e5e7eb',
             borderRadius: '8px',
-            background: '#fff',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+            background: '#ffffff',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
             padding: '16px'
           }}>
-            <h4 style={{ margin: '0 0 12px 0', color: '#333' }}>Knowledge Base</h4>
+            <h4 style={{
+              margin: '0 0 12px 0',
+              fontSize: '1rem',
+              fontWeight: '600',
+              color: '#be123c',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}>
+              <span>📚</span> Knowledge Base
+            </h4>
             <input
               type="text"
               placeholder="Search KB..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
               style={{
                 width: '100%',
-                boxSizing: 'border-box',
                 padding: '8px',
                 marginBottom: '8px',
                 border: '1px solid #ccc',
@@ -271,66 +542,207 @@ const AgentDesktop = () => {
                 fontSize: '14px'
               }}
             />
-            {/* The search button was missing from the screenshot, added back */}
-            <button style={{
+            <button
+              onClick={searchKB}
+              style={{
                 padding: '8px 12px',
-                backgroundColor: '#28a745',
+                backgroundColor: '#be123c',
                 color: 'white',
                 border: 'none',
                 borderRadius: '4px',
                 cursor: 'pointer',
-                fontSize: '14px'
-            }}>
-              Search
+                fontSize: '14px',
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <span>🔍</span> Search
             </button>
+
+            {kbResults.length > 0 && (
+              <div style={{
+                marginTop: '12px',
+                maxHeight: '300px',
+                overflowY: 'auto',
+                border: '1px solid #e5e7eb',
+                borderRadius: '6px',
+                padding: '8px'
+              }}>
+                {kbResults.map((result, i) => (
+                  <div key={i} style={{
+                    marginBottom: '8px',
+                    padding: '8px',
+                    background: '#f9f9f9',
+                    borderRadius: '4px',
+                    borderLeft: '3px solid #be123c'
+                  }}>
+                    <h5 style={{ margin: '0 0 4px 0', fontSize: '14px', fontWeight: '500' }}>
+                      {result.title}
+                    </h5>
+                    <p style={{ margin: '0', fontSize: '12px', color: '#666' }}>
+                      {result.snippet}
+                    </p>
+                    <a 
+                      href={result.url} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      style={{
+                        display: 'block',
+                        marginTop: '4px',
+                        fontSize: '12px',
+                        color: '#007bff',
+                        textDecoration: 'none',
+                        wordBreak: 'break-all'
+                      }}
+                    >
+                      {result.url}
+                    </a>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* RIGHT PANEL: Fluid Width */}
+        {/* RIGHT PANEL */}
         <div style={{
-          flex: '1 1 auto', // Fluid width: Fills remaining horizontal space
+          flex: '1 1 auto',
           display: 'flex',
           flexDirection: 'column',
           gap: '16px',
           overflowY: 'auto'
         }}>
-
-          {/* Card Component */}
+          {/* Transcript */}
           <div style={{
-            border: '1px solid #e0e0e0',
+            border: '1px solid #e5e7eb',
             borderRadius: '8px',
-            background: '#fff',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+            background: '#ffffff',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
             padding: '16px',
             display: 'flex',
             flexDirection: 'column',
-            flex: '1', // Allows this card to take up more vertical space
+            flex: '2',
             minHeight: '200px'
           }}>
-            <TranscriptPane transcript={transcript} />
+            <h4 style={{
+              margin: '0 0 12px 0',
+              fontSize: '1rem',
+              fontWeight: '600',
+              color: '#1f2937',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}>
+              <span>💬</span> Live Transcript
+            </h4>
+            <div style={{
+              flexGrow: 1,
+              overflowY: 'auto',
+              paddingRight: '16px', // ✅ Prevents overlap with scrollbar
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px'
+            }}>
+              <TranscriptPane transcript={transcript} />
+            </div>
             <IntentChips intents={[]} />
           </div>
 
+          {/* AI Assistant Suggestions */}
           <div style={{
-            border: '1px solid #e0e0e0',
+            border: '1px solid #e5e7eb',
             borderRadius: '8px',
-            background: '#fff',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+            background: '#ffffff',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
             padding: '16px'
           }}>
-            <h4 style={{ margin: '0 0 12px 0', color: '#333' }}>
-             
+            <h4 style={{
+              margin: '0 0 12px 0',
+              fontSize: '1rem',
+              fontWeight: '600',
+              color: '#f59e0b',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}>
+              <span>💡</span> AI Assistant Suggestions
             </h4>
-            <Suggestions suggestions={suggestions} />
+            <button
+              onClick={fetchSuggestions}
+              style={{
+                padding: '10px 14px',
+                backgroundColor: '#f59e0b',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '14px',
+                fontWeight: '500',
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <span>✨</span> Get AI Suggestions
+            </button>
+
+            {suggestions.length > 0 && (
+              <div style={{
+                marginTop: '12px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px'
+              }}>
+                {suggestions.map((suggestion, i) => (
+                  <button
+                    key={i}
+                    style={{
+                      width: '100%',
+                      textAlign: 'left',
+                      padding: '12px',
+                      backgroundColor: '#fef3c7',
+                      border: '1px solid #f59e0b',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontWeight: '500',
+                      color: '#d97706',
+                      fontSize: '14px'
+                    }}
+                    onClick={() => {
+                      navigator.clipboard.writeText(suggestion);
+                      alert('Suggestion copied to clipboard!');
+                    }}
+                  >
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
+          {/* Wrap-Up */}
           <div style={{
-            border: '1px solid #e0e0e0',
+            border: '1px solid #e5e7eb',
             borderRadius: '8px',
-            background: '#fff',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
-            padding: '16px'
+            background: '#ffffff',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+            padding: '16px',
+            flex: '1'
           }}>
+            <h4 style={{
+              margin: '0 0 12px 0',
+              fontSize: '1rem',
+              fontWeight: '600',
+              color: '#1f2937',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}>
+              <span>📝</span> Wrap-Up & Actions
+            </h4>
             <NotesWrapUp
               wrapUp={wrapUp}
               sms={smsData}
@@ -342,9 +754,16 @@ const AgentDesktop = () => {
           </div>
         </div>
       </div>
+
+      {/* Pulse Animation */}
+      <style jsx>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
+        }
+      `}</style>
     </div>
   );
 };
 
 export default AgentDesktop;
-

@@ -52,11 +52,92 @@ function App() {
       {callActive ? (
         <AgentDesktop transcript={transcript} />
       ) : (
-        <div className="pre-call-container">
-          <h1>Agent is Idle</h1>
-          <button onClick={handleStartCall}>
-            Simulate Incoming Call (Adrian Miller)
-          </button>
+        // Modern "Agent is Idle" Screen
+        <div style={{
+          height: '100vh',
+          width: '100vw',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: '#f3f4f6', // Light gray background
+          fontFamily: 'Segoe UI, sans-serif'
+        }}>
+          {/* Central Card */}
+          <div style={{
+            backgroundColor: '#ffffff',
+            borderRadius: '12px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+            padding: '48px',
+            textAlign: 'center',
+            maxWidth: '400px',
+            width: '100%',
+            boxSizing: 'border-box'
+          }}>
+            {/* Status Icon */}
+            <div style={{
+              width: '64px',
+              height: '64px',
+              margin: '0 auto 24px',
+              color: '#6b7280',
+              fontSize: '64px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              ☕
+            </div>
+
+            {/* Status Heading */}
+            <h2 style={{
+              margin: '0 0 8px 0',
+              fontSize: '1.75rem',
+              fontWeight: '600',
+              color: '#1f2937'
+            }}>
+              Agent is Idle
+            </h2>
+
+            {/* Subtitle */}
+            <p style={{
+              margin: '8px 0 32px 0',
+              fontSize: '1rem',
+              color: '#6b7280'
+            }}>
+              Waiting for the next incoming call.
+            </p>
+
+            {/* Action Button */}
+            <button
+              onClick={handleStartCall}
+              style={{
+                backgroundColor: '#4f46e5',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '12px 24px',
+                fontSize: '1rem',
+                fontWeight: '500',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                marginTop: '32px',
+                transition: 'all 0.2s ease',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.backgroundColor = '#4338ca';
+                e.target.style.boxShadow = '0 4px 8px rgba(0,0,0,0.1)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.backgroundColor = '#4f46e5';
+                e.target.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+              }}
+            >
+              <span>📞</span>
+              Simulate Incoming Call (Adrian Miller)
+            </button>
+          </div>
         </div>
       )}
 

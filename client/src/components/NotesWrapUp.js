@@ -1,80 +1,173 @@
+// src/components/NotesWrapUp.js
 import React from 'react';
 
-const NotesWrapUp = ({
-  wrapUp = { summary: '', disposition: '', notes: '' }, // ✅ Default fallback
-  sms,
-  smsSent,
-  onGenerateSummary,
-  onSendSms,
-  onUpdateWrapUp
+const NotesWrapUp = ({ 
+  wrapUp, 
+  sms, 
+  smsSent, 
+  onGenerateSummary, 
+  onSendSms, 
+  onUpdateWrapUp 
 }) => {
-  // 🔍 Debug
-  console.log("🔄 NotesWrapUp: Component rendered");
-  console.log("📝 wrapUp:", wrapUp);
-
-  const handleGenerateClick = () => {
-    if (typeof onGenerateSummary === 'function') onGenerateSummary();
-  };
-
-  const handleSendSmsClick = () => {
-    if (typeof onSendSms === 'function') onSendSms();
+  const handleUpdate = (field, value) => {
+    onUpdateWrapUp(field, value);
   };
 
   return (
-    <div className="notes-wrapup" style={{ marginTop: '16px', padding: '16px', fontFamily: 'Arial, sans-serif' }}>
-      <h3 style={{ margin: '0 0 12px 0', fontSize: '16px', color: '#1a1a1a' }}>AI-Generated Wrap-Up</h3>
+    <div style={{
+      height: '100%',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '16px'
+    }}>
+      {/* Action Buttons */}
+      <div style={{
+        display: 'flex',
+        gap: '8px',
+        marginTop: '4px'
+      }}>
+        {/* Generate AI Summary Button */}
+        <button
+          onClick={onGenerateSummary}
+          style={{
+            padding: '8px 16px',
+            backgroundColor: '#4f46e5',
+            color: 'white',
+            border: 'none',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            fontSize: '14px',
+            fontWeight: '500',
+            flex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px'
+          }}
+        >
+          <span>✨</span>
+          Generate AI Summary
+        </button>
 
-      <button
-        onClick={handleGenerateClick}
-        style={{ marginBottom: '16px', padding: '10px 16px', backgroundColor: '#0066cc', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '14px' }}
-      >
-        Generate AI Summary
-      </button>
-
-      {/* Summary */}
-      <div className="field-group" style={{ marginBottom: '12px' }}>
-        <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold', color: '#333' }}>Summary</label>
-        <textarea
-          value={wrapUp.summary ?? ''} // ✅ Fallback to empty string
-          onChange={(e) => onUpdateWrapUp('summary', e.target.value)}
-          rows="3"
-          style={{ width: '100%', fontSize: '14px', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }}
-          placeholder="Enter summary..."
-        />
+        {/* Send SMS Button */}
+        <button
+          onClick={onSendSms}
+          disabled={smsSent}
+          style={{
+            padding: '8px 16px',
+            backgroundColor: smsSent ? '#22c55e' : '#d1d5db',
+            color: smsSent ? 'white' : '#1f2937',
+            border: 'none',
+            borderRadius: '6px',
+            cursor: smsSent ? 'not-allowed' : 'pointer',
+            fontSize: '14px',
+            fontWeight: '500',
+            flex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px'
+          }}
+        >
+          <span>📤</span>
+          {smsSent ? 'SMS Sent' : 'Send SMS'}
+        </button>
       </div>
 
-      {/* Disposition */}
-      <div className="field-group" style={{ marginBottom: '12px' }}>
-        <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold', color: '#333' }}>Disposition</label>
-        <input
-          type="text"
-          value={wrapUp.disposition ?? ''} // ✅ Fallback
-          onChange={(e) => onUpdateWrapUp('disposition', e.target.value)}
-          style={{ width: '100%', fontSize: '14px', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }}
-          placeholder="Enter disposition..."
-        />
-      </div>
+      {/* Form Fields */}
+      <div style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '16px',
+        overflowY: 'auto', // ✅ Enables scrolling when content overflows
+        padding: '8px 0'
+      }}>
+        {/* Summary Field */}
+        <div>
+          <label style={{
+            display: 'block',
+            fontSize: '0.875rem',
+            fontWeight: '500',
+            color: '#374151',
+            marginBottom: '4px'
+          }}>
+            Summary
+          </label>
+          <textarea
+            value={wrapUp.summary || ''}
+            onChange={(e) => handleUpdate('summary', e.target.value)}
+            style={{
+              width: '100%',
+              padding: '8px',
+              border: '1px solid #d1d5db',
+              borderRadius: '6px',
+              resize: 'vertical',
+              fontSize: '14px',
+              lineHeight: 1.5,
+              minHeight: '80px',
+              maxHeight: '200px'
+            }}
+          />
+        </div>
 
-      {/* Case Notes */}
-      <div className="field-group" style={{ marginBottom: '12px' }}>
-        <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold', color: '#333' }}>Case Notes</label>
-        <textarea
-          value={wrapUp.notes ?? ''} // ✅ Fallback
-          onChange={(e) => onUpdateWrapUp('notes', e.target.value)}
-          rows="4"
-          style={{ width: '100%', fontSize: '14px', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }}
-          placeholder="Enter case notes..."
-        />
-      </div>
+        {/* Disposition Field */}
+        <div>
+          <label style={{
+            display: 'block',
+            fontSize: '0.875rem',
+            fontWeight: '500',
+            color: '#374151',
+            marginBottom: '4px'
+          }}>
+            Disposition
+          </label>
+          <select
+            value={wrapUp.disposition || ''}
+            onChange={(e) => handleUpdate('disposition', e.target.value)}
+            style={{
+              width: '100%',
+              padding: '8px',
+              border: '1px solid #d1d5db',
+              borderRadius: '6px',
+              fontSize: '14px'
+            }}
+          >
+            <option value="">Select disposition...</option>
+            <option value="Resolved – Firmware Rollback Applied">Resolved – Firmware Rollback Applied</option>
+            <option value="Pending – Further Investigation">Pending – Further Investigation</option>
+            <option value="Escalated – Technical Support">Escalated – Technical Support</option>
+          </select>
+        </div>
 
-      {/* Send SMS */}
-      <button
-        onClick={handleSendSmsClick}
-        disabled={smsSent}
-        style={{ padding: '10px 16px', backgroundColor: smsSent ? '#6c757d' : '#28a745', color: 'white', border: 'none', borderRadius: '6px', cursor: smsSent ? 'not-allowed' : 'pointer', fontSize: '14px' }}
-      >
-        {smsSent ? 'SMS Sent' : 'Send SMS to Customer'}
-      </button>
+        {/* Case Notes Field */}
+        <div>
+          <label style={{
+            display: 'block',
+            fontSize: '0.875rem',
+            fontWeight: '500',
+            color: '#374151',
+            marginBottom: '4px'
+          }}>
+            Case Notes
+          </label>
+          <textarea
+            value={wrapUp.notes || ''}
+            onChange={(e) => handleUpdate('notes', e.target.value)}
+            style={{
+              width: '100%',
+              padding: '8px',
+              border: '1px solid #d1d5db',
+              borderRadius: '6px',
+              resize: 'vertical',
+              fontSize: '14px',
+              lineHeight: 1.5,
+              minHeight: '80px',
+              maxHeight: '200px'
+            }}
+          />
+        </div>
+      </div>
     </div>
   );
 };
