@@ -161,13 +161,26 @@ const AgentDesktop = () => {
   // ✅ Fetch AI Suggestions (Manual Trigger)
   const fetchSuggestions = async (currentTranscript = transcript) => {
     try {
+      // Create a clean, serializable object with only the data we need
+      const requestData = {
+        transcript: Array.isArray(currentTranscript) 
+          ? currentTranscript.map(({ speaker, text }) => ({ speaker, text }))
+          : [],
+        ticket: searchedTicket || ticketData 
+          ? {
+              id: (searchedTicket || ticketData).id,
+              status: (searchedTicket || ticketData).status,
+              issueSummary: (searchedTicket || ticketData).issueSummary,
+              solution: (searchedTicket || ticketData).solution,
+              // Add other necessary ticket fields here
+            }
+          : null
+      };
+
       const res = await fetch('http://localhost:5000/api/agent-suggestions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          transcript: currentTranscript, 
-          ticket: searchedTicket || ticketData 
-        })
+        body: JSON.stringify(requestData)
       });
 
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -185,7 +198,7 @@ const AgentDesktop = () => {
     }
   };
 
-  // ✅ Generate Summary
+  // ✅ Generate AI Solution (formerly "Generate Summary")
   const handleGenerateSummary = () => {
     fetch('http://localhost:5000/api/generate-summary', {
       method: 'POST',
@@ -201,11 +214,11 @@ const AgentDesktop = () => {
       return res.json();
     })
     .then(data => {
-      console.log("✅ AI Summary Received:", data);
+      console.log("✅ AI Solution Received:", data);
       setWrapUp(data);
     })
     .catch(err => {
-      console.error("❌ Failed to generate summary:", err);
+      console.error("❌ Failed to generate AI solution:", err);
       setWrapUp({
         summary: "Customer reported internet disconnects after recent firmware update...",
         disposition: "Resolved – Firmware Rollback Applied",
@@ -219,10 +232,10 @@ const AgentDesktop = () => {
     setSmsSent(true);
   };
 
-  // ✅ Search Ticket Functionality
+  // ✅ Search Ticket Functionality (Auto-Triggered)
   const searchTicket = () => {
     if (!transcript || transcript.length === 0) {
-      alert("No conversation to analyze.");
+      console.log("No transcript to analyze.");
       return;
     }
 
@@ -253,11 +266,18 @@ const AgentDesktop = () => {
 
     if (matchedTicket) {
       setSearchedTicket(matchedTicket);
-      setSearchQuery(matchedTicket.title);
+      setSearchQuery(matchedTicket.title); // ✅ Auto-fill KB search
     } else {
-      alert("No matching ticket found in database.");
+      console.log("No matching ticket found in database.");
     }
   };
+
+  // ✅ Auto-search ticket when transcript has content
+  useEffect(() => {
+    if (transcript.length > 0) {
+      searchTicket(); // ✅ Auto-trigger on transcript change
+    }
+  }, [transcript]);
 
   // ✅ Search KB using Tavily API
   const searchKB = async () => {
@@ -278,6 +298,13 @@ const AgentDesktop = () => {
       console.error(err);
     }
   };
+
+  // ✅ Auto-search KB when ticket is found
+  useEffect(() => {
+    if (searchedTicket && searchQuery.trim()) {
+      searchKB(); // ✅ Auto-trigger KB search when ticket updates
+    }
+  }, [searchedTicket, searchQuery]);
 
   // ✅ Auto-fill search bar when ticket changes
   useEffect(() => {
@@ -445,29 +472,10 @@ const AgentDesktop = () => {
             }}>
               <span>🎫</span> Ticket Details
             </h4>
-            <button 
-              onClick={searchTicket}
-              style={{
-                padding: '10px 14px',
-                backgroundColor: '#0f766e',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                fontSize: '14px',
-                fontWeight: '500',
-                width: '100%',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px'
-              }}
-            >
-              <span>🔍</span> Search Ticket
-            </button>
 
-            {searchedTicket && (
+            {/* Show Ticket Details if Found */}
+            {searchedTicket ? (
               <div style={{
-                marginTop: '12px',
                 padding: '12px',
                 background: '#f0fdfa',
                 border: '1px solid #a7f3d0',
@@ -506,6 +514,15 @@ const AgentDesktop = () => {
                   <strong>Notes:</strong> {searchedTicket.notes}
                 </div>
               </div>
+            ) : (
+              <p style={{
+                color: '#9ca3af',
+                fontStyle: 'italic',
+                fontSize: '14px',
+                margin: 0
+              }}>
+                No matching ticket found.
+              </p>
             )}
           </div>
 
@@ -640,7 +657,7 @@ const AgentDesktop = () => {
             <div style={{
               flexGrow: 1,
               overflowY: 'auto',
-              paddingRight: '16px', // ✅ Prevents overlap with scrollbar
+              paddingRight: '16px',
               display: 'flex',
               flexDirection: 'column',
               gap: '16px'
@@ -749,6 +766,7 @@ const AgentDesktop = () => {
               smsSent={smsSent}
               onGenerateSummary={handleGenerateSummary}
               onSendSms={handleSendSms}
+              suggestions={suggestions}  
               onUpdateWrapUp={handleUpdateWrapUp}
             />
           </div>

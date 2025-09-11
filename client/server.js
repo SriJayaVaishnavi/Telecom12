@@ -8,6 +8,25 @@ const { createServer } = require("http");
 const { WebSocketServer } = require("ws");
 const { spawn } = require("child_process");
 
+// Clear session storage on server start
+const clearSessionStorage = () => {
+  try {
+    // These are the keys we use in memoryModules.js
+    const sessionKeys = ['ticketMemoryModule', 'kbMemoryModule'];
+    sessionKeys.forEach(key => {
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.removeItem(key);
+      }
+    });
+    console.log(' Session storage cleared on server start');
+  } catch (e) {
+    console.warn('Could not clear session storage:', e.message);
+  }
+};
+
+// Clear session storage when this file is required
+clearSessionStorage();
+
 // Install: npm install node-fetch@2
 const fetch = require('node-fetch');
 global.fetch = fetch; // Enable global fetch for all routes
@@ -215,7 +234,7 @@ ${transcript.slice(-6).map(msg => `${msg.speaker}: ${msg.text}`).join("\n")}
 {"suggestions": ["Suggestion 1", "Suggestion 2", "Suggestion 3"]}
 `;
 
-    // ✅ Fixed URL: Removed space before :generateContent
+    // Fixed URL: Removed space before :generateContent
     const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${process.env.GEMINI_API_KEY}`;
 
     const response = await fetch(GEMINI_URL, {

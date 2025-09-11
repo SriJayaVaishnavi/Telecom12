@@ -1,5 +1,7 @@
 // src/components/NotesWrapUp.js
-import React from 'react';
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ticketMemoryModule, syncTicketMemory, addKbEntryFromTicket } from '../utils/memoryModules';
 
 const NotesWrapUp = ({ 
   wrapUp, 
@@ -7,10 +9,62 @@ const NotesWrapUp = ({
   smsSent, 
   onGenerateSummary, 
   onSendSms, 
-  onUpdateWrapUp 
+  onUpdateWrapUp,
+  transcript = [], 
+  suggestions = [] 
 }) => {
+  const [ticketStatus, setTicketStatus] = useState(null);
+  const [ticketId, setTicketId] = useState(null);
+  const navigate = useNavigate();
+
+  const getStatusFromDisposition = (disposition) => {
+    if (!disposition) return "Open";
+    if (disposition.includes("Resolved")) return "Resolved";
+    if (disposition.includes("Pending")) return "Pending";
+    if (disposition.includes("Escalated")) return "Escalated";
+    return "Open";
+  };
+
   const handleUpdate = (field, value) => {
     onUpdateWrapUp(field, value);
+  };
+
+  const handleConvertToTicket = () => {
+    if (!wrapUp.summary || !wrapUp.disposition) {
+      alert("Please generate AI Solution first.");
+      return;
+    }
+
+    const status = getStatusFromDisposition(wrapUp.disposition);
+    const solution = wrapUp.notes?.trim() 
+      ? wrapUp.notes 
+      : `Action required: ${wrapUp.disposition}. ${wrapUp.summary}`;
+
+    const newTicket = {
+      id: `TKT-${1001 + ticketMemoryModule.length}`,
+      status,
+      createdAt: new Date().toISOString(),
+      customerId: "CUST-78901",
+      issueSummary: wrapUp.summary,
+      solution,
+      transcript: transcript.map(t => `${t.speaker}: ${t.text}`).join('\n'),
+      aiSuggestions: suggestions.length > 0 
+        ? suggestions 
+        : [
+            "Ask if the issue started after the firmware update",
+            "Run a line diagnostic test",
+            "Check firmware version"
+          ],
+      disposition: wrapUp.disposition,
+      notes: wrapUp.notes
+    };
+
+    ticketMemoryModule.push(newTicket);
+    syncTicketMemory();
+    setTicketId(newTicket.id);
+    setTicketStatus("created");
+    
+    alert('✅ Ticket created successfully! You can add it to the Knowledge Base from the Tickets Hub.');
   };
 
   return (
@@ -26,7 +80,6 @@ const NotesWrapUp = ({
         gap: '8px',
         marginTop: '4px'
       }}>
-        {/* Generate AI Summary Button */}
         <button
           onClick={onGenerateSummary}
           style={{
@@ -46,10 +99,9 @@ const NotesWrapUp = ({
           }}
         >
           <span>✨</span>
-          Generate AI Summary
+          Generate AI Solution
         </button>
 
-        {/* Send SMS Button */}
         <button
           onClick={onSendSms}
           disabled={smsSent}
@@ -80,10 +132,9 @@ const NotesWrapUp = ({
         display: 'flex',
         flexDirection: 'column',
         gap: '16px',
-        overflowY: 'auto', // ✅ Enables scrolling when content overflows
+        overflowY: 'auto',
         padding: '8px 0'
       }}>
-        {/* Summary Field */}
         <div>
           <label style={{
             display: 'block',
@@ -111,7 +162,6 @@ const NotesWrapUp = ({
           />
         </div>
 
-        {/* Disposition Field */}
         <div>
           <label style={{
             display: 'block',
@@ -140,7 +190,6 @@ const NotesWrapUp = ({
           </select>
         </div>
 
-        {/* Case Notes Field */}
         <div>
           <label style={{
             display: 'block',
@@ -168,6 +217,60 @@ const NotesWrapUp = ({
           />
         </div>
       </div>
+
+      {/* Convert to Ticket or Go to Hub */}
+      {!ticketStatus ? (
+        <button
+          onClick={handleConvertToTicket}
+          style={{
+            marginTop: '16px',
+            width: '100%',
+            padding: '10px',
+            backgroundColor: '#ea580c',
+            color: 'white',
+            border: 'none',
+            borderRadius: '6px',
+            fontWeight: '500',
+            cursor: 'pointer',
+            fontSize: '14px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px'
+          }}
+        >
+          <span>🎫</span>
+          Convert Conversation to Ticket
+        </button>
+      ) : (
+        <div style={{
+          marginTop: '16px',
+          padding: '12px',
+          backgroundColor: '#fef3c7',
+          border: '1px solid #f59e0b',
+          borderRadius: '6px',
+          textAlign: 'center'
+        }}>
+          <p style={{ margin: '0 0 8px 0', fontWeight: '500', color: '#92400e' }}>
+            ✅ Ticket {ticketId} created!
+          </p>
+          <button
+            onClick={() => navigate('/tickets')}
+            style={{
+              padding: '6px 12px',
+              backgroundColor: '#059669',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontWeight: '500',
+              fontSize: '14px'
+            }}
+          >
+            🎫 Go to Ticket Hub
+          </button>
+        </div>
+      )}
     </div>
   );
 };
